@@ -1,3 +1,3 @@
 'use strict';
 
-angular.module('composerApp', []);
+angular.module('composerApp', ['Composer']);

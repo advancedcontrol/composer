@@ -14,7 +14,7 @@
 **/
 
 
-(function (WebSocket, $, angular) {
+(function (WebSocket, $, angular, debug) {
     'use strict';
 
     // Cache commonly used strings
@@ -23,7 +23,9 @@
         UNBIND = 'unbind',
         DEBUG = 'debug',
         IGNORE = 'ignore',
-        ARGS = [];
+
+        ARGS = [],
+        FLAGS = 'memory unique stopOnFalse';
 
     angular.module('Composer').
 
@@ -44,15 +46,15 @@
                 dispatch = {},  // binding lookups using meta information for dispatch
                 request_id = 0, // keeps track of requests
 
-                system_logger = $.Callbacks(),          // System events (local and remote)
-                connect_callbacks = $.Callbacks(),
-                disconnect_callbacks = $.Callbacks(),
+                system_logger = $.Callbacks(FLAGS),          // System events (local and remote)
+                connect_callbacks = $.Callbacks(FLAGS),
+                disconnect_callbacks = $.Callbacks(FLAGS),
 
 
                 /// ---------- REQUEST HANDLING ---------- \\\
 
                 build_request = function (type, system, module, index, name, args) {
-                    var callbacks = $.Callbacks(),
+                    var callbacks = $.Callbacks(FLAGS),
                         request = {
                             callbacks: callbacks,
                             data: {
@@ -71,13 +73,13 @@
                     }
 
                     // Create the public interface
-                    if (type !== EXEC) {
+                    if (type === EXEC) {
                         request.pub = {
-                            result: $.Callbacks()
+                            result: $.Callbacks(FLAGS)
                         };
                     } else {
                         request.pub = {
-                            result: $.Callbacks(),
+                            result: $.Callbacks(FLAGS),
 
                             // Callbacks available
                             add: callbacks.add,
@@ -114,9 +116,11 @@
 
                         if (req) {
                             req.pub.result.fire(resp);
-                            // TODO:: warn about the failure
+                            // warn about the failure
+                            debug.warn((new Date()).toTimeString() + ' - request failed: ', resp, req);
                         } else {
-                            // TODO:: log the error (no id provided)
+                            // log the error (no id provided)
+                            debug.warn((new Date()).toTimeString() + ' - request failure: ', resp);
                         }
                         break;
                     case 'success':
@@ -130,7 +134,7 @@
                         }
                         break;
                     case 'notify':
-                        dispatch[meta_lookup(resp.meta)].fire(resp.value, resp.meta);
+                        dispatch[meta_lookup(resp.meta)].pub.fire(resp.value, resp.meta);
                         break;
                     case 'debug':
                         if (resp.mod === 'anonymous') {
@@ -144,22 +148,30 @@
                     }
                 },
 
-                unbind = function (type, meta) {
-                    meta.id = request_id;
-                    meta.cmd = type;
+                unbind = function (type, request) {
+                    request.data = request.meta;
+                    delete request.meta;
+
+                    request.data.id = request_id;
+                    request.data.cmd = type;
                     if (state.ready) {
-                        send_request(meta);
+                        send_request(request);
+                    }
+
+                    // Give the request a new result callback
+                    if (request.pub) {
+                        request.pub.result = $.Callbacks(FLAGS);
                     }
 
                     // remove the dispatch information
                     if (type === UNBIND) {
-                        delete dispatch[meta_lookup(meta)];
+                        delete dispatch[meta_lookup(request.data)];
                     } else {    // must be ignore
                         // meta == data (from original request)
-                        systems = dispatch[meta.mod] || {};
-                        delete systems[meta.sys];
+                        systems = dispatch[request.data.mod] || {};
+                        delete systems[request.data.sys];
                         if ($.isEmptyObject(systems)) {
-                            delete dispatch[meta.mod];
+                            delete dispatch[request.data.mod];
                         }
                     }
 
@@ -167,7 +179,7 @@
                 },
 
                 add_dispatch = function (request) {
-                    if (request.data.type === BIND) {
+                    if (request.data.cmd === BIND) {
                         dispatch[meta_lookup(request.meta)] = request;
                     } else {    // must be a logger dispatch
                         // Multiple systems may be subscribed to it
@@ -345,7 +357,7 @@
                                     delete bindings[lookup];
 
                                     if (request.meta !== undefined) {
-                                        unbind(UNBIND, request.meta);
+                                        unbind(UNBIND, request);
                                     }
                                 }
                             };
@@ -355,13 +367,14 @@
                                 if (meta !== undefined) {
                                     // unbind if we were cleared during the binding process.
                                     var current = bindings[lookup];
+                                    current.meta = meta;
+
                                     if (current === request) {
-                                        current.meta = meta;
                                         add_dispatch(current);
 
                                     } else if (current === undefined) {
                                         // Only unbind here if nothing else has started a binding.
-                                        unbind(UNBIND, meta);
+                                        unbind(UNBIND, request);
                                     }
                                 }
                                 // Else the add was a failure.
@@ -370,6 +383,21 @@
 
                             return request.pub;
                         },
+                        unbind: function (module, index, status) {
+                            if (typeof index !== 'number') {
+                                status = index;
+                                index = 1;
+                            }
+
+                            var lookup = system + '_' + module + '_' + index + '_' + status;
+
+                            // check if already bound
+                            if (bindings[lookup]) {
+                                bindings[lookup].pub.unbind();
+                            }
+                        },
+
+
                         debug: function (module, index) {
                             if (index === undefined) {
                                 index = 1;
@@ -398,7 +426,7 @@
                                     delete debugging[lookup];
 
                                     if (request.meta !== undefined) {
-                                        unbind(IGNORE, request.meta);
+                                        unbind(IGNORE, request);
                                     }
                                 }
                             };
@@ -408,13 +436,14 @@
                                 if (meta !== undefined) {
                                     // unbind if we were cleared during the binding process.
                                     var current = debugging[lookup];
+                                    current.meta = meta;
+
                                     if (current === request) {
-                                        current.meta = meta;
                                         add_dispatch(current);
 
                                     } else if (current === undefined) {
                                         // unbind here as nothing else has started a binding and unbind was called.
-                                        unbind(IGNORE, meta);
+                                        unbind(IGNORE, current);
                                     }
                                 }
                             });
@@ -422,12 +451,23 @@
                             return request.pub;
                         },
 
+                        ignore: function (module, index) {
+                            if (index === undefined) {
+                                index = 1;
+                            }
 
+                            var lookup = system + '_' + module;
+
+                            // check if already bound
+                            if (debugging[lookup]) {
+                                debugging[lookup].pub.unbind();
+                            }
+                        },
                         // Clears all bindings and watches.
                         clear_bindings: function () {
                             angular.forEach(bindings, function (request) {
                                 if (request.meta !== undefined) {
-                                    unbind(UNBIND, request.meta);
+                                    unbind(UNBIND, request);
                                 }
                             });
                             bindings = {};
@@ -435,17 +475,34 @@
                         clear_debug: function () {
                             angular.forEach(debugging, function (request) {
                                 if (request.meta !== undefined) {
-                                    unbind(UNBIND, debugging.meta);
+                                    unbind(UNBIND, debugging);
                                 }
                             });
                             debugging = {};
+                        },
+                        dump_state: function () {
+                            debug.debug((new Date()).toTimeString() + ' - Dumping state...');
+                            debug.debug("-- System '" + system + "' State --");
+                            debug.debug('bindings: ', bindings);
+                            debug.debug('debugging: ', debugging);
+                            debug.debug('-- Global State --');
+                            debug.debug('systems requested: ', systems);
+                            debug.debug('pending requests: ', pending);
+                            debug.debug('dispatch list: ', dispatch);
                         }
                     };
                 },
                 on_connect: connect_callbacks,
                 on_disconnect: disconnect_callbacks,
-                logger: system_logger
+                logger: system_logger,
+                dump_state: function () {
+                    debug.debug((new Date()).toTimeString() + ' - Dumping state...');
+                    debug.debug('-- Global State --');
+                    debug.debug('systems requested: ', systems);
+                    debug.debug('pending requests: ', pending);
+                    debug.debug('dispatch list: ', dispatch);
+                }
             };
         }]);
 
-}(this.WebSocket || this.MozWebSocket, this.jQuery, this.angular));
+}(this.WebSocket || this.MozWebSocket, this.jQuery, this.angular, this.debug));
