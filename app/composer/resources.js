@@ -21,35 +21,43 @@
             'Content-Type': 'application/json',
             Accept: 'application/json'
         },
+        GET = 'GET',
+        POST = 'POST',
+        PUT = 'PUT',
+        DELETE = 'DELETE',
         common_crud = {
             // See defaults: http://docs.angularjs.org/api/ngResource.$resource
             get: {
-                method: 'GET',
+                method: GET,
                 headers: common_headers
             },
             query:  {
-                method: 'GET',
+                method: GET,
                 isArray: true,
                 headers: common_headers
             },
             save: {
-                method: 'POST',
+                method: POST,
                 headers: common_headers
             },
             create: {
-                method: 'POST',
+                method: POST,
+                headers: common_headers
+            },
+            send: {
+                method: POST,
                 headers: common_headers
             },
             update: {
-                method: 'PUT',
+                method: PUT,
                 headers: common_headers
             },
             remove: {
-                method: 'DELETE',
+                method: DELETE,
                 headers: common_headers
             },
             delete: {
-                method: 'DELETE',
+                method: DELETE,
                 headers: common_headers
             }
         };
@@ -57,7 +65,7 @@
     angular.module('Composer').
 
         factory('Module', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/modules/:id', {
+            return $resource($composer.endpoint + 'api/modules/:id/:task', {
                 id: '@module_id'
             }, common_crud);
         }]).
@@ -70,13 +78,13 @@
         }]).
 
         factory('System', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/systems/:id', {
+            return $resource($composer.endpoint + 'api/systems/:id/:task', {
                 id: '@system_id'
             }, common_crud);
         }]).
 
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/dependencies/:id', {
+            return $resource($composer.endpoint + 'api/dependencies/:id/:task', {
                 id: '@dependency_id'
             }, common_crud);
         }]).

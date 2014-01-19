@@ -167,10 +167,11 @@
                     if (type === UNBIND) {
                         delete dispatch[meta_lookup(request.data)];
                     } else {    // must be ignore
+                        var sys = dispatch[request.data.mod] || {};
                         // meta == data (from original request)
-                        systems = dispatch[request.data.mod] || {};
-                        delete systems[request.data.sys];
-                        if ($.isEmptyObject(systems)) {
+
+                        delete sys[request.data.sys];
+                        if ($.isEmptyObject(sys)) {
                             delete dispatch[request.data.mod];
                         }
                     }
@@ -183,9 +184,9 @@
                         dispatch[meta_lookup(request.meta)] = request;
                     } else {    // must be a logger dispatch
                         // Multiple systems may be subscribed to it
-                        systems = dispatch[request.data.mod] || {};
-                        dispatch[request.data.mod] = systems;
-                        systems[request.data.sys] = request.callbacks;
+                        var sys = dispatch[request.data.mod] || {};
+                        dispatch[request.data.mod] = sys;
+                        sys[request.data.sys] = request.callbacks;
                     }
                 },
 
