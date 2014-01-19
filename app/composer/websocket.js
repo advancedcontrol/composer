@@ -29,13 +29,8 @@
 
     angular.module('Composer').
 
-        factory('$conductor', ['$composer', '$timeout', '$location', function ($composer, $timeout, $location) {
-            var endpoint,
-                protocol,
-                host,
-                port,
-
-                state = {
+        factory('$conductor', ['$composer', '$timeout', function ($composer, $timeout) {
+            var state = {
                     connection: undefined,  // Websocket instance
                     connected: true,        // Are we currently connected (initialised to true so that any initial failure is triggered)
                     resume: false,          // The reference to the resume timer
@@ -198,7 +193,7 @@
 
 
                 resume = function (token) {
-                    var url = endpoint;
+                    var url = $composer.ws;
                     if (token) {
                         url += '?access_token=' + token;
                     }
@@ -252,6 +247,8 @@
                 // used in system.connected
                 rebind = function (request) {
                     delete request.meta;
+                    // Note:: we are not over writing the result callback..
+                    // Could lead to undesirable behavior? Should be documented
                     send_request(request);
                 };
 
@@ -259,20 +256,6 @@
 
 
             // Start the connection
-            host = $location.host();
-            port = $location.port();
-            if ($location.protocol() === 'http') {
-                protocol = 'ws://';
-                if (port !== 80) {
-                    host += ':' + port;
-                }
-            } else {
-                protocol = 'wss://';
-                if (port !== 443) {
-                    host += ':' + port;
-                }
-            }
-            endpoint = protocol + host + $composer.endpoint + 'websocket';
             checkResume();
 
 

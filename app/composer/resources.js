@@ -65,38 +65,38 @@
     angular.module('Composer').
 
         factory('Module', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/modules/:id/:task', {
+            return $resource($composer.http + 'api/modules/:id/:task', {
                 id: '@module_id'
             }, common_crud);
         }]).
 
         factory('SystemModule', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/systems/:sys_id/modules/:mod_id', {
+            return $resource($composer.http + 'api/systems/:sys_id/modules/:mod_id', {
                 mod_id: '@module_id',
                 sys_id: '@system_id'
             }, common_crud);
         }]).
 
         factory('System', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/systems/:id/:task', {
+            return $resource($composer.http + 'api/systems/:id/:task', {
                 id: '@system_id'
             }, common_crud);
         }]).
 
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/dependencies/:id/:task', {
+            return $resource($composer.http + 'api/dependencies/:id/:task', {
                 id: '@dependency_id'
             }, common_crud);
         }]).
 
         factory('Group', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/groups/:id', {
+            return $resource($composer.http + 'api/groups/:id', {
                 id: '@group_id'
             }, common_crud);
         }]).
 
         factory('Zone', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.endpoint + 'api/zones/:id', {
+            return $resource($composer.http + 'api/zones/:id', {
                 id: '@zone_id'
             }, common_crud);
         }]);
