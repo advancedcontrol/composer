@@ -17,7 +17,7 @@
 (function (angular) {
     'use strict';
 
-    angular.module('Composer', ['ngResource']).
+    angular.module('Composer', ['ngResource', 'SafeApply']).
 
         // isolated circular progress bar
         provider('$composer', [function () {

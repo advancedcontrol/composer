@@ -29,7 +29,7 @@
 
     angular.module('Composer').
 
-        factory('$conductor', ['$composer', '$timeout', function ($composer, $timeout) {
+        factory('$conductor', ['$composer', 'System', '$timeout', '$safeApply', function ($composer, System, $timeout, $safeApply) {
             var state = {
                     connection: undefined,  // Websocket instance
                     connected: true,        // Are we currently connected (initialised to true so that any initial failure is triggered)
@@ -41,15 +41,33 @@
                 dispatch = {},  // binding lookups using meta information for dispatch
                 request_id = 0, // keeps track of requests
 
-                system_logger = $.Callbacks(FLAGS),          // System events (local and remote)
-                connect_callbacks = $.Callbacks(FLAGS),
-                disconnect_callbacks = $.Callbacks(FLAGS),
+                build_callback = function () {
+                    var results = $.Callbacks(FLAGS),
+                        result_add = results.add;
+
+                    results.add = function(scope, callback) {
+                        if (callback === undefined) {
+                            callback = scope;
+                        } else {
+                            scope.$on('$destroy', function() {
+                                results.remove(callback);
+                            });
+                        }
+                        result_add(callback);
+                    };
+
+                    return results;
+                },
+
+                system_logger = build_callback(),          // System events (local and remote)
+                connect_callbacks = build_callback(),
+                disconnect_callbacks = build_callback(),
 
 
                 /// ---------- REQUEST HANDLING ---------- \\\
 
                 build_request = function (type, system, module, index, name, args) {
-                    var callbacks = $.Callbacks(FLAGS),
+                    var callbacks = build_callback(),
                         request = {
                             callbacks: callbacks,
                             data: {
@@ -68,13 +86,15 @@
                     }
 
                     // Create the public interface
+                    
+
                     if (type === EXEC) {
                         request.pub = {
-                            result: $.Callbacks(FLAGS)
+                            result: build_callback()
                         };
                     } else {
                         request.pub = {
-                            result: $.Callbacks(FLAGS),
+                            result: build_callback(),
 
                             // Callbacks available
                             add: callbacks.add,
@@ -191,9 +211,13 @@
 
                 /// ---------- SOCKET HANDLING ---------- \\\
 
+                ping = function () {
+                    state.connection.send('ping');
+                },
 
                 resume = function (token) {
                     var url = $composer.ws;
+
                     if (token) {
                         url += '?access_token=' + token;
                     }
@@ -202,31 +226,43 @@
                     state.resume = $timeout(checkResume, 5000);     // check connection is valid in 5 seconds time
 
                     state.connection.onmessage = function (evt) {
-                        var json = JSON.parse(evt.data);
-                        dispatch_response(json);        // Dispatch the event
+                        if (evt.data !== 'pong') {
+                            var json = JSON.parse(evt.data);
+
+                            $safeApply(function () {
+                                dispatch_response(json);        // Dispatch the event
+                            });
+                        }
                     };
 
                     state.connection.onclose = function () {
-                        if (state.connected) {          // We only want to trigger close the first time
-                            state.connected = false;
+                        if (state.ready) {          // We only want to trigger close the first time
                             state.ready = false;
                             state.connection = undefined;
-                            disconnect_callbacks.fire();
+                            window.clearInterval(state.stayAlive);
+
+                            $safeApply(function () {
+                                disconnect_callbacks.fire();
+                            });
                         }
                     };
 
                     state.connection.onopen = function () {
-                        state.connected = true;         // prevent multiple disconnect triggers
-                        state.ready = true;
-
+                        state.ready = true;         // prevent multiple disconnect triggers
+                        state.stayAlive = window.setInterval(ping, 60000);
+                        
                         // reconnect all the status
                         angular.forEach(systems, function (sys) {
                             sys.connected();
                         });
 
                         // inform any external listeners
-                        connect_callbacks.fire();
+                        $safeApply(function () {
+                            connect_callbacks.fire();
+                        });
                     };
+
+
                 },
 
 
@@ -268,12 +304,29 @@
                         return systems[system];
                     }
 
-                    var bindings = {
+                    var system_settings,
+                        bindings = {
                             // 'sys-id_mod-id_index_status' -> request
                         },  // Bindings we have made to status variables
                         debugging = {
                             // 'sys-id_mod-id_index' -> request
-                        };  // Debugging output we are receiving
+                        },  // Debugging output we are receiving
+                        clear_bindings = function () {
+                            angular.forEach(bindings, function (request) {
+                                if (request.meta !== undefined) {
+                                    unbind(UNBIND, request);
+                                }
+                            });
+                            bindings = {};
+                        },
+                        clear_debug = function () {
+                            angular.forEach(debugging, function (request) {
+                                if (request.meta !== undefined) {
+                                    unbind(IGNORE, debugging);
+                                }
+                            });
+                            debugging = {};
+                        };
 
 
                     // Add this system to list of systems we are connected to
@@ -285,7 +338,18 @@
                         angular.forEach(debugging, rebind);
                     };
 
+                    // Check if this system exists in the database
+                    //system_settings = System.get({id: system}).$promise;
+                    //system_settings.catch(function () {
+                        // System does not exist...
+                        // Remove from cache
+                    //    clear_bindings();
+                    //    clear_debug();
+                     //   delete systems[system];
+                    //});
+
                     return {
+                        //settings: system_settings,
                         exec: function (module, index, func, args) {
                             if (args === undefined) {
                                 if (typeof index === 'number') {
@@ -307,11 +371,16 @@
                             if (state.ready) {
                                 send_request(request);
                             } else {
-                                request.defer.reject('disconnected');
+                                request.pub.result.fire('disconnected');
                             }
 
                             return request.pub;
                         },
+
+                        // TODO:: re-think bindings and events.
+                        // We want the callbacks to be on scopes
+                        // when scopes go out of scope we automatically clean up
+                        // Delete the callback and unbind if there are no more listeners!!
                         bind: function (module, index, status) {
                             if (typeof index !== 'number') {
                                 status = index;
@@ -448,22 +517,8 @@
                             }
                         },
                         // Clears all bindings and watches.
-                        clear_bindings: function () {
-                            angular.forEach(bindings, function (request) {
-                                if (request.meta !== undefined) {
-                                    unbind(UNBIND, request);
-                                }
-                            });
-                            bindings = {};
-                        },
-                        clear_debug: function () {
-                            angular.forEach(debugging, function (request) {
-                                if (request.meta !== undefined) {
-                                    unbind(UNBIND, debugging);
-                                }
-                            });
-                            debugging = {};
-                        },
+                        clear_bindings: clear_bindings,
+                        clear_debug: clear_debug,
                         dump_state: function () {
                             debug.debug((new Date()).toTimeString() + ' - Dumping state...');
                             debug.debug("-- System '" + system + "' State --");
