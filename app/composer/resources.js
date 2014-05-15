@@ -64,12 +64,16 @@
 
     angular.module('Composer').
 
+        // supports params:
+        // * system_id -> list modules in a system (no search available)
+        // * dependency_id -> list modules with a particular dependency
         factory('Module', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/modules/:id/:task', {
                 id: '@module_id'
             }, common_crud);
         }]).
 
+        // Same as system_id above
         factory('SystemModule', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/systems/:sys_id/modules/:mod_id', {
                 mod_id: '@module_id',
@@ -83,6 +87,8 @@
             }, common_crud);
         }]).
 
+        // supports params:
+        // * role -> list dependencies of a particular type
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/dependencies/:id/:task', {
                 id: '@dependency_id'
