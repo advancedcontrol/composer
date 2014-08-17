@@ -33,7 +33,6 @@
             },
             query:  {
                 method: GET,
-                isArray: true,
                 headers: common_headers
             },
             save: {
