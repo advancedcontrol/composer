@@ -1,13 +1,12 @@
 {
   "name": "composer",
-  "version": "1.0.0",
   "dependencies": {
-    "angular": "latest",
-    "angular-resource": "latest",
-    "jquery": "latest"
+    "angular": "1.x",
+    "angular-resource": "1.x",
+    "jquery": "2.1.x"
   },
   "devDependencies": {
-    "angular-mocks": "latest",
-    "angular-scenario": "latest"
+    "angular-mocks": "1.x",
+    "angular-scenario": "1.x"
   }
 }
