@@ -3,7 +3,8 @@
   "dependencies": {
     "angular": "1.x",
     "angular-resource": "1.x",
-    "jquery": "2.1.x"
+    "jquery": "2.1.x",
+    "angular-safeapply": "~1.0.4"
   },
   "devDependencies": {
     "angular-mocks": "1.x",
