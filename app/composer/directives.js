@@ -2,7 +2,7 @@
     'use strict';
 
     var FUNCTION_RE = /(\w+)\((.+)\)/;
-    var PARAM_RE = /(\w+)|('[^']+')/g;
+    var PARAM_RE = /([\w\.]+)|('[^']+')/g;
 
     angular.module('Composer')
         // -----------------------------
@@ -14,7 +14,7 @@
                 scope: true,
                 link: {
                     pre: function($scope, element, attrs) {
-                        $scope.coSystem = $conductor.get(attrs.coSystem);
+                        $scope.coSystem = $conductor.system(attrs.coSystem);
                     }
                 }
             };
@@ -26,6 +26,8 @@
                 scope: true,
                 link: {
                     pre: function($scope, element, attrs) {
+                        // store the string name and integer index of a module instance
+                        // index may be overwritten by a co-index directive
                         $scope.coModule = attrs.coModule;
                         if (attrs.index)
                             $scope.coIndex = parseInt(attrs.index, 10);
@@ -55,29 +57,39 @@
         .directive('coBind', ['$timeout', function($timeout) {
             return {
                 restrict: 'A',
-                scope: false,
                 link: function ($scope, element, attrs) {
-                    var binding = $scope.coSystem.bind($scope.coModule, $scope.coIndex, attrs.coBind);
-                    $scope[attrs.coBind] = null;
-                    var serverValue = null;
+                    // coIndex defaults to 1 in co-module, and means co-index isn't
+                    // a required directive. to avoid instantiating module instances
+                    // with index 1 when they're not needed (or are invalid), defer
+                    // instantiation to bindings (when we know the final index value)
+                    console.log($scope.coSystem);
+                    $scope.coModuleInstance = $scope.coSystem.moduleInstance(
+                        $scope.coModule,
+                        $scope.coIndex
+                    );
 
-                    binding.add($scope, function(data) {
-                        $scope[attrs.coBind] = data;
-                        serverValue = data;
-                    });
-
-                    // read only scopes have no exec attribute
-                    if (!attrs.hasOwnProperty('exec'))
-                        return;
-
-                    // when the bound status variable is the same name as the
-                    // remote function, and only takes a single param, we can
-                    // construct the exec call from the variable name alone
-                    if (attrs.exec == '') {
+                    // execFn and execParams are used to inform the server of updates
+                    // to the status variable being bound. updates are either ignored,
+                    // updated using a function derived from the variable name, or
+                    // updated using a user specified exec function and params
+                    if (!attrs.hasOwnProperty('exec')) {
+                        // read only bindings have no exec attribute
+                        var execFn = null;
+                        var execParams = null;
+    
+                    } else if (attrs.exec == '') {
+                        // when the bound status variable is the same name as the
+                        // remote function, and only takes a single param, we can
+                        // construct the exec call from the variable name alone
                         var execFn = attrs.coBind;
                         var execParams = function() {
-                            return [$scope[attrs.coBind]];
+                            return [$scope.statusVariable.val];
                         }
+
+                        // indicate execParams is for a simple execFn and only
+                        // returns the variables value
+                        execParams.simple = true;
+                        
                     } else {
                         // given a function passed to exec like: volume(34, param)
                         // extract out the function name, and the string listing
@@ -97,10 +109,18 @@
                         }
                     }
 
-                    $scope.$watch(attrs.coBind, function(newval, oldval) {
-                        if ((newval != oldval) && (newval != serverValue))
-                            $scope.coSystem.exec($scope.coModule, $scope.coIndex, execFn, execParams());
-                    });
+                    // instantiate or get a reference to the status variable
+                    $scope.statusVariable = $scope.coModuleInstance.var(attrs.coBind);
+
+                    // elements can bind to name.val, e.g power.val
+                    $scope[attrs.coBind] = $scope.statusVariable;
+
+                    // let the variable we exist (so we can receive success
+                    // and error notifications), and tell it how to send
+                    // updates to the variable's value
+                    //$scope.statusVariable.addObserver();
+                    if (execFn)
+                        $scope.statusVariable.addExec(execFn, execParams);
                 }
             };
         }]);

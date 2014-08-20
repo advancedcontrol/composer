@@ -17,531 +17,387 @@
 (function (WebSocket, $, angular, debug) {
     'use strict';
 
-    // Cache commonly used strings
-    var EXEC = 'exec',
-        BIND = 'bind',
-        UNBIND = 'unbind',
-        DEBUG = 'debug',
-        IGNORE = 'ignore',
+    // timers
+    var SECONDS = 1000,
+        RECONNECT_TIMER_SECONDS  = 5 * SECONDS,
+        KEEP_ALIVE_TIMER_SECONDS = 60 * SECONDS;
 
-        ARGS = [],
-        FLAGS = 'memory unique stopOnFalse';
+    // protocol
+    var PING    = 'ping',
+        PONG    = 'pong',
+        ERROR   = 'error',
+        SUCCESS = 'success',
+        NOTIFY  = 'notify',
+        DEBUG   = 'debug',
+        EXEC    = 'exec',
+        BIND    = 'bind',
+        UNBIND  = 'unbind';
 
-    angular.module('Composer').
+    // events
+    var CONNECTED_BROADCAST_EVENT = '$conductor:connected',
+        MAX_EXECS_PER_SECOND = 10;
 
-        factory('$conductor', ['$composer', 'System', '$timeout', '$safeApply', function ($composer, System, $timeout, $safeApply) {
-            var state = {
-                    connection: undefined,  // Websocket instance
-                    connected: true,        // Are we currently connected (initialised to true so that any initial failure is triggered)
-                    resume: false,          // The reference to the resume timer
-                    ready: false            // are we ready to send / receive?
-                },
-                systems = {},   // systems we are connected to
-                pending = {},   // pending requests
-                dispatch = {},  // binding lookups using meta information for dispatch
-                request_id = 0, // keeps track of requests
+    // debug helpers
+    function debugMsg(prefix, msg) {
+        debug.debug((new Date()).toTimeString() + ' - ' + prefix + ': ', msg);
+    }
 
-                build_callback = function () {
-                    var results = $.Callbacks(FLAGS),
-                        result_add = results.add;
-
-                    results.add = function(scope, callback) {
-                        if (callback === undefined) {
-                            callback = scope;
-                        } else {
-                            scope.$on('$destroy', function() {
-                                results.remove(callback);
-                            });
-                        }
-                        result_add(callback);
-                    };
-
-                    return results;
-                },
-
-                system_logger = build_callback(),          // System events (local and remote)
-                connect_callbacks = build_callback(),
-                disconnect_callbacks = build_callback(),
+    function warnMsg(prefix, msg) {
+        debug.warn((new Date()).toTimeString() + ' - ' + prefix + ': ', msg);
+    }
 
 
-                /// ---------- REQUEST HANDLING ---------- \\\
+    angular.module('Composer')
 
-                build_request = function (type, system, module, index, name, args) {
-                    var callbacks = build_callback(),
-                        request = {
-                            callbacks: callbacks,
-                            data: {
-                                id: request_id,
-                                cmd: type,
-                                sys: system,
-                                mod: module,
-                                index: index,
-                                name: name
-                            }
-                        };
+        .factory('StatusVariableFactory', [
+            '$rootScope',
+            function($rootScope) {
+                return function(name, moduleInstance, system, connection) {
+                    var statusVariable = this;
+                    var observers = [];
+                    var execs = [];
+                    this.val = null;
 
-                    // Add args if provided
-                    if (args !== undefined) {
-                        request.data.args = args;
+                    // ---------------------------
+                    // setup
+                    // ---------------------------
+                    // observers are objects (co-bind directive instances) which
+                    // receive success and failure notifications
+                    this.addObserver = function(observer) {
+                        observers.push(observer);
                     }
 
-                    // Create the public interface
-                    
-
-                    if (type === EXEC) {
-                        request.pub = {
-                            result: build_callback()
-                        };
-                    } else {
-                        request.pub = {
-                            result: build_callback(),
-
-                            // Callbacks available
-                            add: callbacks.add,
-                            remove: callbacks.remove,
-                            fire: callbacks.fire
-                        };
-                    }
-
-                    // Increment the request ID for tracking
-                    request_id += 1;
-                    return request;
-                },
-
-                send_request = function (request) {
-                    pending[request.data.id] = request;
-                    state.connection.send(
-                        JSON.stringify(request.data)
-                    );
-                },
-
-                meta_lookup = function (meta) {
-                    return meta.sys + '_' + meta.mod + '_' + meta.index + '_' + meta.name;
-                },
-
-                dispatch_response = function (resp) {
-                    var req;
-
-                    // See websocket_manager.rb
-                    // types: error, success, notify, debug
-                    switch (resp.type) {
-                    case 'error':
-                        req = pending[resp.id];
-                        delete pending[resp.id];
-
-                        if (req) {
-                            req.pub.result.fire(resp);
-                            // warn about the failure
-                            debug.warn((new Date()).toTimeString() + ' - request failed: ', resp, req);
-                        } else {
-                            // log the error (no id provided)
-                            debug.warn((new Date()).toTimeString() + ' - request failure: ', resp);
-                        }
-                        break;
-                    case 'success':
-                        req = pending[resp.id];
-                        delete pending[resp.id];
-
-                        if (resp.meta) {    // bind req
-                            req.pub.result.fire(resp, resp.meta);
-                        } else {            // exec or debug req
-                            req.pub.result.fire(resp, req.data);
-                        }
-                        break;
-                    case 'notify':
-                        dispatch[meta_lookup(resp.meta)].pub.fire(resp.value, resp.meta);
-                        break;
-                    case 'debug':
-                        if (resp.mod === 'anonymous') {
-                            system_logger.fire(resp.msg, resp);
-                        } else {
-                            angular.forEach(dispatch[resp.mod], function (callback) {
-                                callback.fire(resp.msg, resp);
-                            });
-                        }
-                        break;
-                    }
-                },
-
-                unbind = function (type, request) {
-                    request.data = request.meta;
-                    delete request.meta;
-
-                    request.data.id = request_id;
-                    request.data.cmd = type;
-                    if (state.ready) {
-                        send_request(request);
-                    }
-
-                    // Give the request a new result callback
-                    if (request.pub) {
-                        request.pub.result = $.Callbacks(FLAGS);
-                    }
-
-                    // remove the dispatch information
-                    if (type === UNBIND) {
-                        delete dispatch[meta_lookup(request.data)];
-                    } else {    // must be ignore
-                        var sys = dispatch[request.data.mod] || {};
-                        // meta == data (from original request)
-
-                        delete sys[request.data.sys];
-                        if ($.isEmptyObject(sys)) {
-                            delete dispatch[request.data.mod];
-                        }
-                    }
-
-                    request_id += 1;
-                },
-
-                add_dispatch = function (request) {
-                    if (request.data.cmd === BIND) {
-                        dispatch[meta_lookup(request.meta)] = request;
-                    } else {    // must be a logger dispatch
-                        // Multiple systems may be subscribed to it
-                        var sys = dispatch[request.data.mod] || {};
-                        dispatch[request.data.mod] = sys;
-                        sys[request.data.sys] = request.callbacks;
-                    }
-                },
-
-
-                /// ---------- END REQUEST HANDLING ---------- \\\
-
-
-                /// ---------- SOCKET HANDLING ---------- \\\
-
-                ping = function () {
-                    state.connection.send('ping');
-                },
-
-                resume = function (token) {
-                    var url = $composer.ws;
-
-                    if (token) {
-                        url += '?access_token=' + token;
-                    }
-
-                    state.connection = new WebSocket(url);
-                    state.resume = $timeout(checkResume, 5000);     // check connection is valid in 5 seconds time
-
-                    state.connection.onmessage = function (evt) {
-                        if (evt.data !== 'pong') {
-                            var json = JSON.parse(evt.data);
-
-                            $safeApply(function () {
-                                dispatch_response(json);        // Dispatch the event
-                            });
-                        }
-                    };
-
-                    state.connection.onclose = function () {
-                        if (state.ready) {          // We only want to trigger close the first time
-                            state.ready = false;
-                            state.connection = undefined;
-                            window.clearInterval(state.stayAlive);
-
-                            $safeApply(function () {
-                                disconnect_callbacks.fire();
-                            });
-                        }
-                    };
-
-                    state.connection.onopen = function () {
-                        state.ready = true;         // prevent multiple disconnect triggers
-                        state.stayAlive = window.setInterval(ping, 60000);
-                        
-                        // reconnect all the status
-                        angular.forEach(systems, function (sys) {
-                            sys.connected();
+                    // exec functions are sent to the server to update the
+                    // value of the status variable
+                    this.addExec = function(fn, params) {
+                        execs.push({
+                            fn: fn,
+                            params: params
                         });
+                    }
 
-                        // inform any external listeners
-                        $safeApply(function () {
-                            connect_callbacks.fire();
+                    // ---------------------------
+                    // protocol
+                    // ---------------------------
+                    // binding informs the server the client wants to be informed
+                    // of changes to the variable's value. connection will receive
+                    // the update and 
+                    this.bind = function() {
+                        connection.bind(
+                            system.id,
+                            moduleInstance.name,
+                            moduleInstance.index,
+                            name
+                        );
+                    }
+
+                    this.notify = function(msg) {
+                        statusVariable.val = msg.value;
+                        $rootScope.$safeApply();
+                    }
+
+                    this.error = function(msg) {
+                        observers.forEach(function(observer) {
+                            if (observer.statusVariableError)
+                                observer.statusVariableError(statusVariable, msg);
                         });
-                    };
-
-
-                },
-
-
-                // Requests an access token for authenticating the user for websocket use
-                // We need to add it as a request params VS a header as we don't have access
-                checkResume = function () {
-                    if (state.connection === undefined || state.connection.readyState === state.connection.CLOSED) {
-                        var token;
-                        // TODO:: we need to actually rootscope emit a request
-                        // for an oauth2 token
-                        resume(token);
-                    } else {
-                        state.resume = $timeout(checkResume, 5000);     // check connection is valid
-                    }
-                },
-
-
-                // used in system.connected
-                rebind = function (request) {
-                    delete request.meta;
-                    // Note:: we are not over writing the result callback..
-                    // Could lead to undesirable behavior? Should be documented
-                    send_request(request);
-                };
-
-                /// --------- END SOCKET HANDLING -------- \\\
-
-
-            // Start the connection
-            checkResume();
-
-
-            /// ---------- PUBLIC API ---------- \\\
-
-
-            return {
-                get: function (system) {
-                    if (systems[system]) {
-                        return systems[system];
                     }
 
-                    var system_settings,
-                        bindings = {
-                            // 'sys-id_mod-id_index_status' -> request
-                        },  // Bindings we have made to status variables
-                        debugging = {
-                            // 'sys-id_mod-id_index' -> request
-                        },  // Debugging output we are receiving
-                        clear_bindings = function () {
-                            angular.forEach(bindings, function (request) {
-                                if (request.meta !== undefined) {
-                                    unbind(UNBIND, request);
-                                }
-                            });
-                            bindings = {};
-                        },
-                        clear_debug = function () {
-                            angular.forEach(debugging, function (request) {
-                                if (request.meta !== undefined) {
-                                    unbind(IGNORE, debugging);
-                                }
-                            });
-                            debugging = {};
-                        };
+                    this.success = function(msg) {
+                        observers.forEach(function(observer) {
+                            if (observer.statusVariableSuccess)
+                                observer.statusVariableSuccess(statusVariable, msg);
+                        });
+                    }
 
+                    // when val is updated, inform the server by running each
+                    // exec. throttle execution, but ensure the final value
+                    // is sent even if it occurs during the wait period.
+                    $rootScope.$watch(function() {
+                        return statusVariable.val;
+                    }, function(newval, oldval) {
+                        // TODO: should we queue execs until system.id != null && connected?
+                        if (!system.id || newval == oldval)
+                            return;
 
-                    // Add this system to list of systems we are connected to
-                    systems[system] = this;
+                        execs.forEach(function(exec) {
+                            connection.exec(
+                                system.id,
+                                moduleInstance.name,
+                                moduleInstance.index,
+                                exec.fn,
+                                exec.params()
+                            );
+                        });
+                    });
 
-                    // Provide some signaling methods
-                    this.connected = function () {
-                        angular.forEach(bindings, rebind);
-                        angular.forEach(debugging, rebind);
-                    };
-
-                    // Check if this system exists in the database
-                    //system_settings = System.get({id: system}).$promise;
-                    //system_settings.catch(function () {
-                        // System does not exist...
-                        // Remove from cache
-                    //    clear_bindings();
-                    //    clear_debug();
-                     //   delete systems[system];
-                    //});
-
-                    return {
-                        //settings: system_settings,
-                        exec: function (module, index, func, args) {
-                            if (args === undefined) {
-                                if (typeof index === 'number') {
-                                    args = ARGS;   // no arguments
-                                } else {
-                                    args = func;
-                                    func = index;
-                                    index = 1;
-
-                                    if (args === undefined) {
-                                        args = ARGS;
-                                    }
-                                }
-                            }
-
-                            var request = build_request(EXEC, system, module, index, func, args);
-
-                            // Fail the request if not connected.
-                            if (state.ready) {
-                                send_request(request);
-                            } else {
-                                request.pub.result.fire('disconnected');
-                            }
-
-                            return request.pub;
-                        },
-
-                        // TODO:: re-think bindings and events.
-                        // We want the callbacks to be on scopes
-                        // when scopes go out of scope we automatically clean up
-                        // Delete the callback and unbind if there are no more listeners!!
-                        bind: function (module, index, status) {
-                            if (typeof index !== 'number') {
-                                status = index;
-                                index = 1;
-                            }
-
-                            var lookup = system + '_' + module + '_' + index + '_' + status,
-                                request;
-
-                            // check if already bound
-                            if (bindings[lookup]) {
-                                return bindings[lookup].pub;
-                            }
-
-                            // Otherwise add the binding
-                            request = build_request(BIND, system, module, index, status);
-                            bindings[lookup] = request;
-
-                            if (state.ready) {
-                                send_request(request);
-                            }
-
-                            // Provide a method to unbind
-                            request.pub.unbind = function () {
-                                // Delete only if the same binding
-                                if (request === bindings[lookup]) {
-                                    delete bindings[lookup];
-
-                                    if (request.meta !== undefined) {
-                                        unbind(UNBIND, request);
-                                    }
-                                }
-                            };
-
-                            // Update the binding information on success
-                            request.pub.result.add(function (result, meta) {
-                                if (meta !== undefined) {
-                                    // unbind if we were cleared during the binding process.
-                                    var current = bindings[lookup];
-                                    current.meta = meta;
-
-                                    if (current === request) {
-                                        add_dispatch(current);
-
-                                    } else if (current === undefined) {
-                                        // Only unbind here if nothing else has started a binding.
-                                        unbind(UNBIND, request);
-                                    }
-                                }
-                                // Else the add was a failure.
-                                // We'll leave the binding for next re-connect
-                            });
-
-                            return request.pub;
-                        },
-                        unbind: function (module, index, status) {
-                            if (typeof index !== 'number') {
-                                status = index;
-                                index = 1;
-                            }
-
-                            var lookup = system + '_' + module + '_' + index + '_' + status;
-
-                            // check if already bound
-                            if (bindings[lookup]) {
-                                bindings[lookup].pub.unbind();
-                            }
-                        },
-
-
-                        debug: function (module, index) {
-                            if (index === undefined) {
-                                index = 1;
-                            }
-
-                            var lookup = system + '_' + module,
-                                request;
-
-                            // check if already bound
-                            if (debugging[lookup]) {
-                                return debugging[lookup].pub;
-                            }
-
-                            // Otherwise add the debug binding
-                            request = build_request(DEBUG, system, module, index, DEBUG);
-                            debugging[lookup] = request;
-
-                            if (state.ready) {
-                                send_request(request);
-                            }
-
-                            // Provide a method to unbind
-                            request.pub.unbind = function () {
-                                // Delete only if the same binding
-                                if (request === debugging[lookup]) {
-                                    delete debugging[lookup];
-
-                                    if (request.meta !== undefined) {
-                                        unbind(IGNORE, request);
-                                    }
-                                }
-                            };
-
-                            // Update the binding information on success
-                            request.pub.result.add(function (result, meta) {
-                                if (meta !== undefined) {
-                                    // unbind if we were cleared during the binding process.
-                                    var current = debugging[lookup];
-                                    current.meta = meta;
-
-                                    if (current === request) {
-                                        add_dispatch(current);
-
-                                    } else if (current === undefined) {
-                                        // unbind here as nothing else has started a binding and unbind was called.
-                                        unbind(IGNORE, current);
-                                    }
-                                }
-                            });
-
-                            return request.pub;
-                        },
-
-                        ignore: function (module, index) {
-                            if (index === undefined) {
-                                index = 1;
-                            }
-
-                            var lookup = system + '_' + module;
-
-                            // check if already bound
-                            if (debugging[lookup]) {
-                                debugging[lookup].pub.unbind();
-                            }
-                        },
-                        // Clears all bindings and watches.
-                        clear_bindings: clear_bindings,
-                        clear_debug: clear_debug,
-                        dump_state: function () {
-                            debug.debug((new Date()).toTimeString() + ' - Dumping state...');
-                            debug.debug("-- System '" + system + "' State --");
-                            debug.debug('bindings: ', bindings);
-                            debug.debug('debugging: ', debugging);
-                            debug.debug('-- Global State --');
-                            debug.debug('systems requested: ', systems);
-                            debug.debug('pending requests: ', pending);
-                            debug.debug('dispatch list: ', dispatch);
-                        }
-                    };
-                },
-                on_connect: connect_callbacks,
-                on_disconnect: disconnect_callbacks,
-                logger: system_logger,
-                dump_state: function () {
-                    debug.debug((new Date()).toTimeString() + ' - Dumping state...');
-                    debug.debug('-- Global State --');
-                    debug.debug('systems requested: ', systems);
-                    debug.debug('pending requests: ', pending);
-                    debug.debug('dispatch list: ', dispatch);
+                    // once created, attempt to bind if a connection is
+                    // available, and parent system is loaded
+                    if (connection.connected && system.id != null)
+                        this.bind();
                 }
-            };
-        }]);
+            }
+        ])
+
+        .factory('ModuleInstanceFactory', [
+            'StatusVariableFactory',
+            function(StatusVariable) {
+                return function(name, index, system, connection) {
+                    var moduleInstance = this;
+                    var statusVariables = [];
+                    this.index = index;
+                    this.name = name;
+
+                    this.var = function(name) {
+                        if (!moduleInstance.hasOwnProperty(name)) {
+                            moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection);
+                            statusVariables.push(moduleInstance[name]);
+                        }
+                        return moduleInstance[name];
+                    }
+
+                    this.bind = function() {
+                        statusVariables.forEach(function(statusVariable) {
+                            statusVariable.bind();
+                        });
+                    }
+                }
+            }
+        ])
+
+        .factory('SystemFactory', [
+            'ModuleInstanceFactory',
+            '$rootScope',
+            'System',
+            function(ModuleInstance, $rootScope, System) {
+                return function(systemName, connection) {
+                    var moduleInstances = [];
+                    var system = this;
+                    this.id = null;
+
+                    // API calls use the system ID rather than system name. inform
+                    // conductor of the system's id so notify msgs can be routed
+                    // to this system correctly
+                    System.get({id: systemName}, function(resp) {
+                        connection.setSystemID(systemName, resp.id);
+                        system.id = resp.id;
+                        bind();
+                    }, function(reason) {
+                    });
+
+                    // on disconnection, all bindings will be forgotten. rebind
+                    // once connected, and after we've retrieved the system's id
+                    $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
+
+                    function bind() {
+                        if (connection.connected && system.id != null) {
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.bind();
+                            });
+                        }
+                    }
+
+                    // bound status variables are stored on the system object
+                    // and can be watched by elements. module_index is used
+                    // to scope the variables by a module instance. each instance
+                    // stores status variables, so values can be retrieved
+                    // through e.g system.Display_1.power.val
+                    this.moduleInstance = function(module, index) {
+                        var varName = module + '_' + index;
+                        if (!system.hasOwnProperty(varName)) {
+                            system[varName] = new ModuleInstance(module, index, system, connection);
+                            moduleInstances.push(system[varName]);
+                        }
+                        return system[varName];
+                    }
+                }
+            }
+        ])
+
+        .service('$conductor', [
+            '$rootScope',
+            '$composer',
+            '$timeout',
+            '$safeApply',
+            'SystemFactory',
+
+            function ($rootScope, $composer, $timeout, $safeApply, System) {
+                // ---------------------------
+                // connection
+                // ---------------------------
+                // web socket connection - connected is a public variable that
+                // can be watched. its state is also broadcast through rootScope.
+                // systems watch the connected state, and add their bindings
+                // when a connection becomes available. connections are pinged
+                // every n seconds to keep them alive.
+                var keepAliveInterval = null;
+                this.connected = false;
+                var connection = null;
+                var conductor = this;
+
+                function connect() {
+                    connection = new WebSocket($composer.ws);
+                    connection.onmessage = onmessage;
+                    connection.onclose = onclose;
+                    connection.onopen = onopen;
+                }
+
+                function reconnect() {
+                    if (connection == null || connection.readyState === connection.CLOSED)
+                        connect();
+                }
+
+                function startKeepAlive() {
+                    keepAliveInterval = window.setInterval(function() {
+                        connection.send(PING);
+                    }, KEEP_ALIVE_TIMER_SECONDS);
+                }
+
+                function stopKeepAlive() {
+                    window.clearInterval(keepAliveInterval);
+                }
+
+                function setConnected(state) {
+                    conductor.connected = state;
+                    $rootScope.$safeApply(function() {
+                        $rootScope.conductor.connected = state;
+                    });
+                    $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
+                }
+
+
+                // ---------------------------
+                // event handlers
+                // ---------------------------
+                function onopen(evt) {
+                    setConnected(true);
+                    startKeepAlive();
+                }
+
+                function onclose(evt) {
+                    if (!conductor.connected)
+                        return;
+                    setConnected(false);
+                    connection = null;
+                    stopKeepAlive();
+                }
+
+                function onmessage(evt) {
+                    // message data will either be the string 'PONG', or json
+                    // data with an associated type
+                    if (evt.data == PONG)
+                        return;
+                    else
+                        var msg = JSON.parse(evt.data);
+
+                    // success, error and notify messages are all handled by
+                    // status variable instances. if meta is available (defining
+                    // the system id, module name, index and variable name)
+                    // attempt to retrieve a reference to the status variable
+                    // specified, before passing responsibility for handling the
+                    // message to it. if retrieval fails at any step (e.g because
+                    // no module instance matches the path specified by meta)
+                    // log debug information as the fail action.
+                    if (msg.type == SUCCESS || msg.type == ERROR || msg.type == NOTIFY) {
+                        var meta = msg.meta;
+                        if (!meta)
+                            return debugMsg('request - ' + msg.type, msg);
+
+                        var system = systemIDs[meta.sys];
+                        if (!system)
+                            return debugMsg(msg.type + ' received for unknown system', msg);
+
+                        var moduleInstance = system[meta.mod + '_' + meta.index];
+                        if (!moduleInstance)
+                            return debugMsg(msg.type + ' received for unknown module instance', msg);
+                        
+                        var statusVariable = moduleInstance[meta.name];
+                        if (!statusVariable)
+                            return debugMsg(msg.type + ' received for unknown status variable', msg);
+
+                        statusVariable[msg.type](msg);
+
+                    } else {
+                        if (msg.mod === 'anonymous') {
+                            //system_logger.fire(msg.msg, msg);
+                        } else {
+                            /*angular.forEach(debuggers[msg.mod], function (callback) {
+                                callback.fire(msg.msg, msg);
+                            });*/
+                        }
+
+                    }
+                }
+
+
+                // ---------------------------
+                // protocol
+                // ---------------------------
+                function sendRequest(type, system, module, index, name, args) {
+                    if (!conductor.connected)
+                        return false;
+
+                    var request = {
+                        id:     0,
+                        cmd:    type,
+                        sys:    system,
+                        mod:    module,
+                        index:  index,
+                        name:   name
+                    };
+
+                    if (args !== undefined)
+                        request.args = args;
+
+                    connection.send(
+                        JSON.stringify(request)
+                    );
+
+                    return true;
+                }
+
+                this.exec = function(system, module, index, func, args) {
+                    return sendRequest(EXEC, system, module, index, func, args);
+                }
+
+                this.bind = function(system, module, index, name) {
+                    return sendRequest(BIND, system, module, index, name);
+                }
+
+                this.unbind = function(system, module, index, name) {
+                    return sendRequest(UNBIND, system, module, index, name);
+                }
+
+
+                // ---------------------------
+                // systems
+                // ---------------------------
+                var systemIDs = {};
+                var systems = {};
+
+                this.system = function(systemName) {
+                    if (!systems[systemName])
+                        systems[systemName] = new System(systemName, conductor);
+                    return systems[systemName];
+                }
+
+                this.removeSystem = function(systemName) {
+                    delete systems[systemName];
+                }
+
+                this.setSystemID = function(systemName, id) {
+                    systemIDs[id] = systems[systemName];
+                }
+
+
+                // ---------------------------
+                // initialisation
+                // ---------------------------
+                // start a connection, and monitor the connection every n
+                // seconds, reconnecting if needed
+                window.setInterval(reconnect, RECONNECT_TIMER_SECONDS);
+                connect();
+            }
+        ]);
 
 }(this.WebSocket || this.MozWebSocket, this.jQuery, this.angular, this.debug));
