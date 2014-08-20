@@ -259,9 +259,6 @@
 
                 function setConnected(state) {
                     conductor.connected = state;
-                    $rootScope.$safeApply(function() {
-                        $rootScope.conductor.connected = state;
-                    });
                     $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
                 }
 
