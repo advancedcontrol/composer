@@ -1,6 +1,6 @@
 <div co-system="Test Control System">
     <div co-module="Test" index="1">
         <p co-bind="power" exec="power(power.val)"><input type="checkbox" ng-model="power.val"> Power</p>
-        <p co-bind="zoom" exec><input type="range" min="0" max="100" ng-model="zoom.val"> Zoom</p>
+        <p co-bind="zoom" exec max-execs-per-second="3"><input type="range" min="0" max="100" ng-model="zoom.val"> Zoom</p>
     </div>
 </div>

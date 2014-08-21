@@ -62,7 +62,6 @@
                     // a required directive. to avoid instantiating module instances
                     // with index 1 when they're not needed (or are invalid), defer
                     // instantiation to bindings (when we know the final index value)
-                    console.log($scope.coSystem);
                     $scope.coModuleInstance = $scope.coSystem.moduleInstance(
                         $scope.coModule,
                         $scope.coIndex
@@ -118,9 +117,17 @@
                     // let the variable we exist (so we can receive success
                     // and error notifications), and tell it how to send
                     // updates to the variable's value
-                    //$scope.statusVariable.addObserver();
                     if (execFn)
                         $scope.statusVariable.addExec(execFn, execParams);
+
+                    // success and error callbacks
+                    $scope.statusVariable.addObserver(function(statusVariable, msg) {
+                    }, function(statusVariable, msg) {
+                    });
+
+                    // override default exec throttling if provided
+                    if (attrs.hasOwnProperty('maxExecsPerSecond'))
+                        $scope.statusVariable.setMaxExecsPerSecond(attrs.maxExecsPerSecond);
                 }
             };
         }]);

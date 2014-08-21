@@ -34,8 +34,8 @@
         UNBIND  = 'unbind';
 
     // events
-    var CONNECTED_BROADCAST_EVENT = '$conductor:connected',
-        MAX_EXECS_PER_SECOND = 10;
+    var CONNECTED_BROADCAST_EVENT    = '$conductor:connected',
+        DEFAULT_MAX_EXECS_PER_SECOND = 5;
 
     // debug helpers
     function debugMsg(prefix, msg) {
@@ -47,14 +47,22 @@
     }
 
 
+
     angular.module('Composer')
 
+        // ------------------------------------------------------
+        // status variables
+        // ------------------------------------------------------
         .factory('StatusVariableFactory', [
             '$rootScope',
+
             function($rootScope) {
                 return function(name, moduleInstance, system, connection) {
                     var statusVariable = this;
-                    var observers = [];
+                    var successObservers = [];
+                    var errorObservers = [];
+                    var throttlePeriod = 0;
+                    var timeout = null;
                     var execs = [];
                     this.val = null;
 
@@ -62,18 +70,36 @@
                     // setup
                     // ---------------------------
                     // observers are objects (co-bind directive instances) which
-                    // receive success and failure notifications
-                    this.addObserver = function(observer) {
-                        observers.push(observer);
+                    // receive success and error notifications
+                    this.addObserver = function(successFn, errorFn) {
+                        successObservers.push(successFn);
+                        errorObservers.push(errorFn);
                     }
 
                     // exec functions are sent to the server to update the
-                    // value of the status variable
+                    // value of the status variable. more than one fn may
+                    // be added per status variable, but this function tries
+                    // to ignore duplicates. simple functions (derived from
+                    // the variable name) will only be added once. non-simple
+                    // functions (e.g zoom('something', 34)) will be added
+                    // immediately because it's currently impossible to test
+                    // whether two param functions are equivalent.
                     this.addExec = function(fn, params) {
+                        if (params.simple) {
+                            execs.forEach(function(exec) {
+                                if (exec.fn == fn && exec.params.simple)
+                                    return;
+                            });
+                        }
+
                         execs.push({
                             fn: fn,
                             params: params
                         });
+                    }
+
+                    this.setMaxExecsPerSecond = function(maxExecs) {
+                        throttlePeriod = SECONDS / maxExecs;
                     }
 
                     // ---------------------------
@@ -97,29 +123,46 @@
                     }
 
                     this.error = function(msg) {
-                        observers.forEach(function(observer) {
-                            if (observer.statusVariableError)
-                                observer.statusVariableError(statusVariable, msg);
+                        warnMsg('error', msg);
+                        errorObservers.forEach(function(fn) {
+                            fn(statusVariable, msg);
                         });
                     }
 
                     this.success = function(msg) {
-                        observers.forEach(function(observer) {
-                            if (observer.statusVariableSuccess)
-                                observer.statusVariableSuccess(statusVariable, msg);
+                        successObservers.forEach(function(fn) {
+                            fn(statusVariable, msg);
                         });
                     }
 
-                    // when val is updated, inform the server by running each
-                    // exec. throttle execution, but ensure the final value
-                    // is sent even if it occurs during the wait period.
-                    $rootScope.$watch(function() {
-                        return statusVariable.val;
-                    }, function(newval, oldval) {
-                        // TODO: should we queue execs until system.id != null && connected?
-                        if (!system.id || newval == oldval)
+                    function update(val) {
+                        // ignore updates until a connection is available
+                        if (!system.id || !connection.connected)
                             return;
 
+                        // return immediately if a timeout is waiting and will
+                        // handle the new value. this.val will be updated and
+                        // the timeout will send the value when it fires.
+                        if (timeout)
+                            return;
+
+                        // run each exec to update the server before the
+                        // throttling timer starts
+                        _update();
+
+                        // set a new timer that will fire after the throttling
+                        // period. any updates made during that time will be
+                        // stored in this.val. if val != this.val, an update
+                        // was made during the timer period and should be sent
+                        // to the server.
+                        timeout = setTimeout(function() {
+                            if (val != statusVariable.val)
+                                _update();
+                            timeout = null;
+                        }, throttlePeriod);
+                    }
+
+                    function _update() {
                         execs.forEach(function(exec) {
                             connection.exec(
                                 system.id,
@@ -129,7 +172,23 @@
                                 exec.params()
                             );
                         });
+                    }
+
+                    // ---------------------------
+                    // initialisation
+                    // ---------------------------
+                    // when val is updated, inform the server by running each
+                    // exec. throttle execution, but ensure the final value
+                    // is sent even if it occurs during the wait period.
+                    $rootScope.$watch(function() {
+                        return statusVariable.val;
+                    }, function(newval, oldval) {
+                        if (newval != oldval)
+                            update(newval);
                     });
+
+                    // the co-bind directive may override this
+                    this.setMaxExecsPerSecond(DEFAULT_MAX_EXECS_PER_SECOND);
 
                     // once created, attempt to bind if a connection is
                     // available, and parent system is loaded
@@ -139,8 +198,14 @@
             }
         ])
 
+
+
+        // ------------------------------------------------------
+        // module instances
+        // ------------------------------------------------------
         .factory('ModuleInstanceFactory', [
             'StatusVariableFactory',
+
             function(StatusVariable) {
                 return function(name, index, system, connection) {
                     var moduleInstance = this;
@@ -148,6 +213,10 @@
                     this.index = index;
                     this.name = name;
 
+                    // find or instantiate a status variable associated with
+                    // this model instance. there's no check or guarantee that
+                    // the created status variable will correspond with a
+                    // real status variable on the server.
                     this.var = function(name) {
                         if (!moduleInstance.hasOwnProperty(name)) {
                             moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection);
@@ -156,6 +225,9 @@
                         return moduleInstance[name];
                     }
 
+                    // on connection/reconnection every status variable is
+                    // responsible for binding the new connection with the
+                    // variable so notify messages can be received.
                     this.bind = function() {
                         statusVariables.forEach(function(statusVariable) {
                             statusVariable.bind();
@@ -165,24 +237,34 @@
             }
         ])
 
+
+        // ------------------------------------------------------
+        // systems
+        // ------------------------------------------------------
         .factory('SystemFactory', [
             'ModuleInstanceFactory',
+            'growlNotifications',
             '$rootScope',
             'System',
-            function(ModuleInstance, $rootScope, System) {
-                return function(systemName, connection) {
+
+            function(ModuleInstance, growlNotifications, $rootScope, System) {
+                return function(name, connection) {
                     var moduleInstances = [];
                     var system = this;
                     this.id = null;
 
-                    // API calls use the system ID rather than system name. inform
+                    // API calls use the system id rather than system name. inform
                     // conductor of the system's id so notify msgs can be routed
                     // to this system correctly
-                    System.get({id: systemName}, function(resp) {
-                        connection.setSystemID(systemName, resp.id);
+                    System.get({id: name}, function(resp) {
+                        connection.setSystemID(name, resp.id);
                         system.id = resp.id;
                         bind();
                     }, function(reason) {
+                        growlNotifications.add(
+                            'The system "' + name + '" could not be loaded, and may be misspelt.',
+                            'error'
+                        );
                     });
 
                     // on disconnection, all bindings will be forgotten. rebind
@@ -190,11 +272,11 @@
                     $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
 
                     function bind() {
-                        if (connection.connected && system.id != null) {
-                            moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.bind();
-                            });
-                        }
+                        if (!connection.connected || system.id == null)
+                            return;
+                        moduleInstances.forEach(function(moduleInstance) {
+                            moduleInstance.bind();
+                        });
                     }
 
                     // bound status variables are stored on the system object
@@ -214,6 +296,10 @@
             }
         ])
 
+
+        // ------------------------------------------------------
+        // conductor - web socket
+        // ------------------------------------------------------
         .service('$conductor', [
             '$rootScope',
             '$composer',
@@ -226,10 +312,10 @@
                 // connection
                 // ---------------------------
                 // web socket connection - connected is a public variable that
-                // can be watched. its state is also broadcast through rootScope.
-                // systems watch the connected state, and add their bindings
-                // when a connection becomes available. connections are pinged
-                // every n seconds to keep them alive.
+                // can be queried. its state is broadcast through rootScope.
+                // systems watch for the broadcast, and add their bindings when
+                // a connection becomes available. connections are pinged every
+                // n seconds to keep them alive.
                 var keepAliveInterval = null;
                 this.connected = false;
                 var connection = null;
@@ -372,18 +458,18 @@
                 var systemIDs = {};
                 var systems = {};
 
-                this.system = function(systemName) {
-                    if (!systems[systemName])
-                        systems[systemName] = new System(systemName, conductor);
-                    return systems[systemName];
+                this.system = function(name) {
+                    if (!systems[name])
+                        systems[name] = new System(name, conductor);
+                    return systems[name];
                 }
 
-                this.removeSystem = function(systemName) {
-                    delete systems[systemName];
+                this.removeSystem = function(name) {
+                    delete systems[name];
                 }
 
-                this.setSystemID = function(systemName, id) {
-                    systemIDs[id] = systems[systemName];
+                this.setSystemID = function(name, id) {
+                    systemIDs[id] = systems[name];
                 }
 
 
