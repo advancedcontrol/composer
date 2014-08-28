@@ -51,6 +51,10 @@
                 method: PUT,
                 headers: common_headers
             },
+            task: {
+                method: POST,
+                headers: common_headers
+            },
             remove: {
                 method: DELETE,
                 headers: common_headers
@@ -65,7 +69,8 @@
 
         factory('Module', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/modules/:id/:task', {
-                id: '@id'
+                id: '@id',
+                task: '@_task'
             }, common_crud);
         }]).
 
@@ -78,13 +83,15 @@
 
         factory('System', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/systems/:id/:task', {
-                id: '@id'
+                id: '@id',
+                task: '@_task'
             }, common_crud);
         }]).
 
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/dependencies/:id/:task', {
-                id: '@id'
+                id: '@id',
+                task: '@_task'
             }, common_crud);
         }]).
 
