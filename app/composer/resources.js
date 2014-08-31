@@ -82,10 +82,25 @@
         }]).
 
         factory('System', ['$composer', '$resource', function ($composer, $resource) {
+            var custom = angular.extend({
+                    'funcs': {
+                        method:'GET',
+                        headers: common_headers,
+                        url: $composer.http + 'api/systems/:id/funcs',
+                        isArray: true
+                    },
+                    'exec': {
+                        method:'POST',
+                        headers: common_headers,
+                        url: $composer.http + 'api/systems/:id/exec',
+                        isArray: true
+                    }
+                }, common_crud);
+
             return $resource($composer.http + 'api/systems/:id/:task', {
                 id: '@id',
                 task: '@_task'
-            }, common_crud);
+            }, custom);
         }]).
 
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
