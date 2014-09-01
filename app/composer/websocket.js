@@ -17,6 +17,9 @@
 (function (WebSocket, $, angular, debug) {
     'use strict';
 
+    // Request ID
+    var req_id = 0;
+
     // timers
     var SECONDS = 1000,
         RECONNECT_TIMER_SECONDS  = 5 * SECONDS,
@@ -57,14 +60,17 @@
             '$rootScope',
 
             function($rootScope) {
-                return function(name, moduleInstance, system, connection) {
-                    var statusVariable = this;
-                    var successObservers = [];
-                    var errorObservers = [];
-                    var throttlePeriod = 0;
-                    var timeout = null;
-                    var execs = [];
-                    this.val = null;
+                return function(name, moduleInstance, system, connection, initVal) {
+                    var statusVariable = this,
+                        successObservers = [],
+                        errorObservers = [],
+                        throttlePeriod = 0,
+                        timeout = null,
+                        serverVal = initVal,
+                        execs = [],
+                        unbindRoot;   // used to clean up the watch on root scope
+
+                    this.val = initVal;
                     this.bindings = 0;
 
                     // ---------------------------
@@ -121,6 +127,7 @@
                     this.unbind = function() {
                         statusVariable.bindings -= 1;
                         if (statusVariable.bindings === 0) {
+                            unbindRoot();
                             delete moduleInstance[name];
                             connection.unbind(
                                 system.id,
@@ -132,7 +139,8 @@
                     }
 
                     this.notify = function(msg) {
-                        statusVariable.val = msg.value;
+                        serverVal = msg.value;
+                        statusVariable.val = serverVal;
                         $rootScope.$safeApply();
                     }
 
@@ -194,10 +202,12 @@
                     // when val is updated, inform the server by running each
                     // exec. throttle execution, but ensure the final value
                     // is sent even if it occurs during the wait period.
-                    $rootScope.$watch(function() {
+                    unbindRoot = $rootScope.$watch(function () {
                         return statusVariable.val;
-                    }, function(newval, oldval) {
-                        if (newval != oldval)
+                    }, function (newval) {
+
+                        // We compare with the last value we received from the server
+                        if (newval != serverVal)
                             update(newval);
                     });
 
@@ -232,9 +242,9 @@
                     // this model instance. there's no check or guarantee that
                     // the created status variable will correspond with a
                     // real status variable on the server.
-                    this.var = function(name) {
+                    this.var = function(name, initVal) {
                         if (!moduleInstance.hasOwnProperty(name)) {
-                            moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection);
+                            moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection, initVal);
                             statusVariables.push(moduleInstance[name]);
                         }
                         moduleInstance[name].bindings += 1;
@@ -275,10 +285,13 @@
 
             function(ModuleInstance, growlNotifications, $rootScope, System) {
                 return function(name, connection) {
-                    var moduleInstances = [];
-                    var system = this;
+                    var moduleInstances = [],
+                        system = this,
+                        unbindRoot;
+
                     this.bindings = 0;
                     this.id = null;
+                    this.$name = name;
                     
 
                     // API calls use the system id rather than system name. inform
@@ -297,7 +310,7 @@
 
                     // on disconnection, all bindings will be forgotten. rebind
                     // once connected, and after we've retrieved the system's id
-                    $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
+                    unbindRoot = $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
 
                     function bind() {
                         if (!connection.connected || system.id == null)
@@ -310,6 +323,7 @@
                     function unbind() {
                         system.bindings -= 1;
                         if (system.bindings === 0) {
+                            unbindRoot();
                             delete connection[name];
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.unbind();
@@ -459,8 +473,10 @@
                     if (!conductor.connected)
                         return false;
 
+                    req_id += 1;
+
                     var request = {
-                        id:     0,
+                        id:     req_id,
                         cmd:    type,
                         sys:    system,
                         mod:    module,
