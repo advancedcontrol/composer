@@ -65,6 +65,7 @@
                     var timeout = null;
                     var execs = [];
                     this.val = null;
+                    this.bindings = 0;
 
                     // ---------------------------
                     // setup
@@ -115,6 +116,19 @@
                             moduleInstance.index,
                             name
                         );
+                    }
+
+                    this.unbind = function() {
+                        statusVariable.bindings -= 1;
+                        if (statusVariable.bindings === 0) {
+                            delete moduleInstance[name];
+                            connection.unbind(
+                                system.id,
+                                moduleInstance.name,
+                                moduleInstance.index,
+                                name
+                            );
+                        }
                     }
 
                     this.notify = function(msg) {
@@ -207,9 +221,10 @@
             'StatusVariableFactory',
 
             function(StatusVariable) {
-                return function(name, index, system, connection) {
+                return function(name, index, varName, system, connection) {
                     var moduleInstance = this;
                     var statusVariables = [];
+                    this.bindings = 0;
                     this.index = index;
                     this.name = name;
 
@@ -222,6 +237,7 @@
                             moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection);
                             statusVariables.push(moduleInstance[name]);
                         }
+                        moduleInstance[name].bindings += 1;
                         return moduleInstance[name];
                     }
 
@@ -232,6 +248,16 @@
                         statusVariables.forEach(function(statusVariable) {
                             statusVariable.bind();
                         });
+                    }
+
+                    this.unbind = function() {
+                        moduleInstance.bindings -= 1;
+                        if (moduleInstance.bindings === 0) {
+                            delete system[varName];
+                            statusVariables.forEach(function(statusVariable) {
+                                statusVariable.unbind();
+                            });
+                        }
                     }
                 }
             }
@@ -251,7 +277,9 @@
                 return function(name, connection) {
                     var moduleInstances = [];
                     var system = this;
+                    this.bindings = 0;
                     this.id = null;
+                    
 
                     // API calls use the system id rather than system name. inform
                     // conductor of the system's id so notify msgs can be routed
@@ -279,6 +307,16 @@
                         });
                     }
 
+                    function unbind() {
+                        system.bindings -= 1;
+                        if (system.bindings === 0) {
+                            delete connection[name];
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.unbind();
+                            });
+                        }
+                    }
+
                     // bound status variables are stored on the system object
                     // and can be watched by elements. module_index is used
                     // to scope the variables by a module instance. each instance
@@ -287,9 +325,10 @@
                     this.moduleInstance = function(module, index) {
                         var varName = module + '_' + index;
                         if (!system.hasOwnProperty(varName)) {
-                            system[varName] = new ModuleInstance(module, index, system, connection);
+                            system[varName] = new ModuleInstance(module, index, varName, system, connection);
                             moduleInstances.push(system[varName]);
                         }
+                        system[varName].bindings += 1;
                         return system[varName];
                     }
                 }
@@ -461,6 +500,7 @@
                 this.system = function(name) {
                     if (!systems[name])
                         systems[name] = new System(name, conductor);
+                    systems[name].bindings += 1;
                     return systems[name];
                 }
 
