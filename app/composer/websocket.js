@@ -135,6 +135,9 @@
                                 moduleInstance.index,
                                 name
                             );
+                            if (timeout) {
+                                clearTimeout(timeout);
+                            }
                         }
                     }
 
