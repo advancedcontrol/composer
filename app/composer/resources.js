@@ -94,6 +94,17 @@
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/exec',
                         isArray: true
+                    },
+                    'types': {
+                        method:'GET',
+                        headers: common_headers,
+                        url: $composer.http + 'api/systems/:id/types',
+                        isArray: true
+                    },
+                    'count': {
+                        method:'GET',
+                        headers: common_headers,
+                        url: $composer.http + 'api/systems/:id/count'
                     }
                 }, common_crud);
 
