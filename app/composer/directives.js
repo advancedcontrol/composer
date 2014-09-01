@@ -15,6 +15,10 @@
                 link: {
                     pre: function($scope, element, attrs) {
                         $scope.coSystem = $conductor.system(attrs.coSystem);
+
+                        $scope.$on('$destroy', function () {
+                            $scope.coSystem.unbind();
+                        });
                     }
                 }
             };
@@ -111,6 +115,11 @@
                     // instantiate or get a reference to the status variable
                     $scope.statusVariable = $scope.coModuleInstance.var(attrs.coBind);
 
+                    // Decrement the binding count when the element goes out of scope
+                    $scope.$on('$destroy', function () {
+                        $scope.statusVariable.unbind();
+                    });
+
                     // elements can bind to name.val, e.g power.val
                     $scope[attrs.coBind] = $scope.statusVariable;
 
@@ -120,9 +129,13 @@
                     if (execFn)
                         $scope.statusVariable.addExec(execFn, execParams);
 
+
+                    // if (callbacks defined) {}
                     // success and error callbacks
                     $scope.statusVariable.addObserver(function(statusVariable, msg) {
+                        // TODO:: attribute eval with variable
                     }, function(statusVariable, msg) {
+                        // TODO:: attribute eval with variable
                     });
 
                     // override default exec throttling if provided
