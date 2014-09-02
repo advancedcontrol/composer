@@ -215,7 +215,7 @@
                                 // we want to wait till the end of the apply cycle
                                 pendingCheck = $timeout(function () {
                                     pendingCheck = null;
-                                    if (coModule && coIndex) {
+                                    if (coSystem && coModule && coIndex && coBind) {
                                         performUnbind();
                                         performBinding();
                                     }
