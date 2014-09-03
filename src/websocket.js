@@ -70,60 +70,16 @@
             function($rootScope, $composer) {
                 return function(name, moduleInstance, system, connection, initVal) {
                     var statusVariable = this,
-                        successObservers = [],
-                        errorObservers = [],
-                        changeObservers = [],
                         throttlePeriod = 0,
                         timeout = null,
                         serverVal = initVal,
+                        lastSent = initVal,
                         execs = [],
                         unbindRoot;   // used to clean up the watch on root scope
 
                     this.val = initVal;
                     this.bindings = 0;
 
-                    // ---------------------------
-                    // setup
-                    // ---------------------------
-                    // observers are objects (co-bind directive instances) which
-                    // receive success and error notifications
-                    this.addObservers = function(opts) {
-                        opts = opts || {};
-
-                        if (opts.successFn)
-                            successObservers.push(opts.successFn);
-
-                        if (opts.errorFn)
-                            errorObservers.push(opts.errorFn);
-
-                        if (opts.changeFn)
-                            changeObservers.push(opts.changeFn);
-
-                        // Provide a de-register function
-                        return function () {
-                            statusVariable.removeObservers(opts);
-                        };
-                    };
-
-                    this.removeObservers = function(opts) {
-                        opts = opts || {};
-
-                        var remove = function(arr, func) {
-                            var pos = arr.indexOf(func);
-                            if (pos >= 0) {
-                                arr.splice(pos, 1);
-                            }
-                        };
-
-                        if (opts.successFn)
-                            remove(successObservers, opts.successFn);
-
-                        if (opts.errorFn)
-                            remove(errorObservers, opts.errorFn);
-
-                        if (opts.changeFn)
-                            remove(changeObservers, opts.changeFn);
-                    };
 
                     // exec functions are sent to the server to update the
                     // value of the status variable. more than one fn may
@@ -189,10 +145,8 @@
                             debugMsg('notify', msg);
                         }
                         serverVal = msg.value;
+                        lastSent = serverVal;
                         statusVariable.val = serverVal;
-                        changeObservers.forEach(function(fn) {
-                            fn(statusVariable, msg);
-                        });
                         $rootScope.$safeApply();
                     };
 
@@ -201,9 +155,6 @@
                             warnMsg('error', msg);
                         }
                         $rootScope.$broadcast(WARNING_BROADCAST_EVENT, msg);
-                        errorObservers.forEach(function(fn) {
-                            fn(statusVariable, msg);
-                        });
                         $rootScope.$safeApply();
                     };
 
@@ -211,10 +162,6 @@
                         if ($composer.debug) {
                             debugMsg('success', msg);
                         }
-                        successObservers.forEach(function(fn) {
-                            fn(statusVariable, msg);
-                        });
-                        $rootScope.$safeApply();
                     };
 
                     var update = function(val) {
@@ -266,8 +213,11 @@
                     }, function (newval) {
 
                         // We compare with the last value we received from the server
-                        if (newval != serverVal)
+                        // and the last value we requested 
+                        if (newval != serverVal || newval != lastSent) {
+                            lastSent = newval;
                             update(newval);
+                        }
                     });
 
                     // the co-bind directive may override this

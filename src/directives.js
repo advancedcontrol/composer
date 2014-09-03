@@ -210,18 +210,10 @@
                         coModule,
                         coIndex,
                         coBind,
-
-                        // Callbacks
-                        unbindCallbacks,
-                        onError = attrs.onError ? $parse(attrs.onError) : null,
-                        onSuccess = attrs.onSuccess ? $parse(attrs.onSuccess) : null,
-                        onChange = attrs.onChange ? $parse(attrs.onChange) : null,
                         performUnbind = function () {
                             if ($scope.hasOwnProperty('$statusVariable')) {
-                                unbindCallbacks();
                                 $scope.$statusVariable.unbind();
                                 $scope.$statusVariable = null;
-                                unbindCallbacks = null;
                             }
                         },
 
@@ -315,30 +307,6 @@
                             // updates to the variable's value
                             if (execFn)
                                 $scope.$statusVariable.addExec(execFn, execParams, initVal);
-
-                            
-                            // success and error callbacks
-                            var callbacks = {};
-
-                            if (onError) {
-                                callbacks.errorFn = function(statusVariable, msg) {
-                                    onError($scope, {$status: statusVariable, $msg: msg});
-                                }
-                            }
-
-                            if (onSuccess) {
-                                callbacks.successFn = function(statusVariable, msg) {
-                                    onSuccess($scope, {$status: statusVariable, $msg: msg});
-                                }
-                            }
-
-                            if (onChange) {
-                                callbacks.changeFn = function(statusVariable, msg) {
-                                    onChange($scope, {$status: statusVariable, $msg: msg});
-                                }
-                            }
-
-                            unbindCallbacks = $scope.$statusVariable.addObservers(callbacks);
 
                             // override default exec throttling if provided
                             if (attrs.hasOwnProperty('maxEps'))
