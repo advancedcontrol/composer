@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+        <title>ACA Composer</title>
+
+        <meta name="viewport" content="width=device-width">
+
+        <!-- if you wish to style anything -->
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body ng-app="Composer">
+        <main co-system="'System Name Here'">
+
+            <!--
+                module-list: This grabs the list of module types in a system
+                             Example module types: Display, Switcher, Lighting, Mixer etc
+                                module-list="modules" assigns ['Display', 'Lighting', ...] to modules
+
+                indicies-of: Grabs a list of the modules of that type.
+                             For example if you had two displays:
+                                indicies-of="'Display' as indices"
+                             Would output [1, 2] and assign it to indices
+
+                co-module: Sets the module type you would like to control
+                           Any bindings within will be binding to this module, they can be nested
+
+                co-index: Sets the index of the above module type you would like to bind to.
+                          If not set then it defaults to index 1
+
+                co-bind: binds to a status variable on the Module + Index combination defined above
+                             co-bind="'power'" will bind to the power variable and make its state
+                             available through "power.val"
+
+                exec: Will be called each time the associated binding is updated on the client side
+                      So if power.val is updated (in the click event below) then the function defined
+                      by exec will be called on the module
+             -->
+            <div module-list="modules">
+                <div ng-repeat="module in modules">
+                    <ol co-module="module" indices-of="module as indices">
+                        <li ng-repeat="index in indices">
+                            {{module}} {{index}}:
+                            <button co-index="index" co-bind="'power'" exec="power(power.val)" ng-click="power.val = !power.val">
+                                Power
+                                <span ng-if="power.val">Off</span>
+                                <span ng-if="!power.val">On</span>
+                            </button>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+
+        </main>
+
+        <script src="../bower_components/angular/angular.js"></script>
+        <script src="../bower_components/angular-resource/angular-resource.js"></script>
+        <script src="../bower_components/angular-safeapply/safe-apply.js"></script>
+
+        <script src="../src/ba-debug.js"></script>
+        <script src="../src/composer.js"></script>
+        <script src="../src/resources.js"></script>
+        <script src="../src/websocket.js"></script>
+        <script src="../src/directives.js"></script>
+
+        <!-- Optional settings -->
+        <script src="settings.js"></script>
+    </body>
+</html>

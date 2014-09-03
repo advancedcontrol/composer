@@ -5,6 +5,9 @@
         PARAM_RE = /([\w\.]+)|('[^']+')/g,
         COUNT_RE = /^\s*([\s\S]+?)\s+as\s+([\s\S]+?)\s*$/,
 
+        // TODO:: duplicate variable in websocket. Should DRY this up.
+        ERROR_BROADCAST_EVENT = '$conductor:error',
+
         // Ref: https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperty
         WITH_VAL = function (value) {
             return {
@@ -18,7 +21,10 @@
     angular.module('Composer')
 
         // Rest API based directives
-        .directive('indicesOf', ['System', 'growlNotifications', function(System, growlNotifications) {
+        .directive('indicesOf', [
+            'System', 
+            '$rootScope', 
+        function(System, $rootScope) {
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
@@ -49,10 +55,7 @@
                                     $scope[scopeVar] = indices;
                                 },
                                 loadFailed = function (failed) {
-                                    growlNotifications.add(
-                                        'Error loading the number of "' + moduleType + '" in system "' + system.$name + '".',
-                                        'error'
-                                    );
+                                    $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the number of "' + moduleType + '" in system "' + system.$name + '".');
                                 };
 
                             system.$countOf = system.$countOf || {};
@@ -81,7 +84,10 @@
             };
         }])
 
-        .directive('moduleList', ['System', 'growlNotifications', function(System, growlNotifications) {
+        .directive('moduleList', [
+            'System',
+            '$rootScope',
+        function(System, $rootScope) {
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
@@ -93,10 +99,7 @@
                                     $scope[scopeVar] = modList;
                                 },
                                 loadFailed = function () {
-                                    growlNotifications.add(
-                                        'Error loading the list of modules in system "' + $scope.coSystem.$name + '".',
-                                        'error'
-                                    );
+                                    $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the list of modules in system "' + $scope.coSystem.$name + '".');
                                 };
 
                             // Check if cached - avoid hitting the API if we don't need to
@@ -124,7 +127,9 @@
         // -----------------------------
         // scopes
         // -----------------------------
-        .directive('coSystem', ['$conductor', function($conductor) {
+        .directive('coSystem', [
+            '$conductor',
+        function($conductor) {
             var unbind = function($scope) {
                 if ($scope.hasOwnProperty('coSystem')) {
                     $scope.coSystem.unbind();
@@ -193,7 +198,10 @@
         // -----------------------------
         // widgets
         // -----------------------------
-        .directive('coBind', ['$timeout', function($timeout) {
+        .directive('coBind', [
+            '$timeout',
+            '$parse',
+        function($timeout, $parse) {
             return {
                 restrict: 'A',
                 scope: false,
@@ -202,11 +210,22 @@
                         coModule,
                         coIndex,
                         coBind,
+
+                        // Callbacks
+                        unbindCallbacks,
+                        onError = attrs.onError ? $parse(attrs.onError) : null,
+                        onSuccess = attrs.onSuccess ? $parse(attrs.onSuccess) : null,
+                        onChange = attrs.onChange ? $parse(attrs.onChange) : null,
                         performUnbind = function () {
                             if ($scope.hasOwnProperty('$statusVariable')) {
+                                unbindCallbacks();
                                 $scope.$statusVariable.unbind();
+                                $scope.$statusVariable = null;
+                                unbindCallbacks = null;
                             }
                         },
+
+                        // Status binding
                         pendingCheck,
                         checkCanBind = function () {
                             if (!pendingCheck && coSystem && coModule && coIndex && coBind) {
@@ -299,11 +318,27 @@
 
                             
                             // success and error callbacks
-                            //$scope.$statusVariable.addObserver(function(statusVariable, msg) {
-                                // TODO:: attribute eval with variable
-                            //}, function(statusVariable, msg) {
-                                // TODO:: attribute eval with variable
-                            //});
+                            var callbacks = {};
+
+                            if (onError) {
+                                callbacks.errorFn = function(statusVariable, msg) {
+                                    onError($scope, {$status: statusVariable, $msg: msg});
+                                }
+                            }
+
+                            if (onSuccess) {
+                                callbacks.successFn = function(statusVariable, msg) {
+                                    onSuccess($scope, {$status: statusVariable, $msg: msg});
+                                }
+                            }
+
+                            if (onChange) {
+                                callbacks.changeFn = function(statusVariable, msg) {
+                                    onChange($scope, {$status: statusVariable, $msg: msg});
+                                }
+                            }
+
+                            unbindCallbacks = $scope.$statusVariable.addObservers(callbacks);
 
                             // override default exec throttling if provided
                             if (attrs.hasOwnProperty('maxEps'))

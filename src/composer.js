@@ -27,10 +27,12 @@
             this.host = undefined;
             this.port = undefined;
             this.tls = undefined;
+            this.debug = false;
 
             this.$get = ['$location', function ($location) {
-                var host = self.host || $location.host(),
-                    port = self.port || $location.port(),
+                var host  = self.host || $location.host(),
+                    port  = self.port || $location.port(),
+                    debug = !!self.debug,
                     http_endpoint,
                     ws_endpoint;
 
@@ -64,7 +66,8 @@
                     host: host,
                     port: port,
                     http: http_endpoint,
-                    ws: ws_endpoint
+                    ws: ws_endpoint,
+                    debug: debug
                 };
             }];
         }]);

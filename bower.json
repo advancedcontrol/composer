@@ -1,14 +1,11 @@
 {
   "name": "composer",
+  "main": ["src/ba-debug.js", "src/composer.js", "src/resources.js", "src/websocket.js", "src/directives.js"],
+  "description": "",
   "dependencies": {
     "angular": "1.x",
     "angular-resource": "1.x",
-    "jquery": "2.1.x",
-    "angular-safeapply": "~1.0.4",
-    "angular-growl-notifications": "~2.0.0"
+    "angular-safeapply": "latest"
   },
-  "devDependencies": {
-    "angular-mocks": "1.x",
-    "angular-scenario": "1.x"
-  }
+  "devDependencies": {}
 }

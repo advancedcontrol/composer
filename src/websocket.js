@@ -14,7 +14,7 @@
 **/
 
 
-(function (WebSocket, $, angular, debug) {
+(function (WebSocket, angular, debug) {
     'use strict';
 
     // Request ID
@@ -38,17 +38,25 @@
 
     // events
     var CONNECTED_BROADCAST_EVENT    = '$conductor:connected',
+        ERROR_BROADCAST_EVENT        = '$conductor:error',
+        WARNING_BROADCAST_EVENT      = '$conductor:warning',
         DEFAULT_MAX_EXECS_PER_SECOND = 5;
 
     // debug helpers
-    function debugMsg(prefix, msg) {
-        debug.debug((new Date()).toTimeString() + ' - ' + prefix + ': ', msg);
-    }
+    var debugMsg = function (prefix, msg) {
+            arguments[0] = (new Date()).toTimeString() + ' - ' + arguments[0] + ': ';
+            debug.debug.apply(debug, arguments);
+        },
 
-    function warnMsg(prefix, msg) {
-        debug.warn((new Date()).toTimeString() + ' - ' + prefix + ': ', msg);
-    }
+        warnMsg = function (prefix, msg) {
+            arguments[0] = (new Date()).toTimeString() + ' - ' + arguments[0] + ': ';
+            debug.warn.apply(debug, arguments);
+        },
 
+        errorMsg = function (prefix, msg) {
+            arguments[0] = (new Date()).toTimeString() + ' - ' + arguments[0] + ': ';
+            debug.error.apply(debug, arguments);
+        };
 
 
     angular.module('Composer')
@@ -58,12 +66,13 @@
         // ------------------------------------------------------
         .factory('StatusVariableFactory', [
             '$rootScope',
-
-            function($rootScope) {
+            '$composer',
+            function($rootScope, $composer) {
                 return function(name, moduleInstance, system, connection, initVal) {
                     var statusVariable = this,
                         successObservers = [],
                         errorObservers = [],
+                        changeObservers = [],
                         throttlePeriod = 0,
                         timeout = null,
                         serverVal = initVal,
@@ -78,10 +87,43 @@
                     // ---------------------------
                     // observers are objects (co-bind directive instances) which
                     // receive success and error notifications
-                    this.addObserver = function(successFn, errorFn) {
-                        successObservers.push(successFn);
-                        errorObservers.push(errorFn);
-                    }
+                    this.addObservers = function(opts) {
+                        opts = opts || {};
+
+                        if (opts.successFn)
+                            successObservers.push(opts.successFn);
+
+                        if (opts.errorFn)
+                            errorObservers.push(opts.errorFn);
+
+                        if (opts.changeFn)
+                            changeObservers.push(opts.changeFn);
+
+                        // Provide a de-register function
+                        return function () {
+                            statusVariable.removeObservers(opts);
+                        };
+                    };
+
+                    this.removeObservers = function(opts) {
+                        opts = opts || {};
+
+                        var remove = function(arr, func) {
+                            var pos = arr.indexOf(func);
+                            if (pos >= 0) {
+                                arr.splice(pos, 1);
+                            }
+                        };
+
+                        if (opts.successFn)
+                            remove(successObservers, opts.successFn);
+
+                        if (opts.errorFn)
+                            remove(errorObservers, opts.errorFn);
+
+                        if (opts.changeFn)
+                            remove(changeObservers, opts.changeFn);
+                    };
 
                     // exec functions are sent to the server to update the
                     // value of the status variable. more than one fn may
@@ -103,11 +145,11 @@
                             fn: fn,
                             params: params
                         });
-                    }
+                    };
 
                     this.setMaxExecsPerSecond = function(maxExecs) {
                         throttlePeriod = SECONDS / maxExecs;
-                    }
+                    };
 
                     // ---------------------------
                     // protocol
@@ -122,10 +164,11 @@
                             moduleInstance.index,
                             name
                         );
-                    }
+                    };
 
                     this.unbind = function() {
                         statusVariable.bindings -= 1;
+
                         if (statusVariable.bindings === 0) {
                             unbindRoot();
                             delete moduleInstance[name];
@@ -139,65 +182,78 @@
                                 clearTimeout(timeout);
                             }
                         }
-                    }
+                    };
 
                     this.notify = function(msg) {
+                        if ($composer.debug) {
+                            debugMsg('notify', msg);
+                        }
                         serverVal = msg.value;
                         statusVariable.val = serverVal;
+                        changeObservers.forEach(function(fn) {
+                            fn(statusVariable, msg);
+                        });
                         $rootScope.$safeApply();
-                    }
+                    };
 
                     this.error = function(msg) {
-                        warnMsg('error', msg);
+                        if ($composer.debug) {
+                            warnMsg('error', msg);
+                        }
+                        $rootScope.$broadcast(WARNING_BROADCAST_EVENT, msg);
                         errorObservers.forEach(function(fn) {
                             fn(statusVariable, msg);
                         });
-                    }
+                        $rootScope.$safeApply();
+                    };
 
                     this.success = function(msg) {
+                        if ($composer.debug) {
+                            debugMsg('success', msg);
+                        }
                         successObservers.forEach(function(fn) {
                             fn(statusVariable, msg);
                         });
-                    }
+                        $rootScope.$safeApply();
+                    };
 
-                    function update(val) {
-                        // ignore updates until a connection is available
-                        if (!system.id || !connection.connected)
-                            return;
+                    var update = function(val) {
+                            // ignore updates until a connection is available
+                            if (!system.id || !connection.connected)
+                                return;
 
-                        // return immediately if a timeout is waiting and will
-                        // handle the new value. this.val will be updated and
-                        // the timeout will send the value when it fires.
-                        if (timeout)
-                            return;
+                            // return immediately if a timeout is waiting and will
+                            // handle the new value. this.val will be updated and
+                            // the timeout will send the value when it fires.
+                            if (timeout)
+                                return;
 
-                        // run each exec to update the server before the
-                        // throttling timer starts
-                        _update();
+                            // run each exec to update the server before the
+                            // throttling timer starts
+                            _update();
 
-                        // set a new timer that will fire after the throttling
-                        // period. any updates made during that time will be
-                        // stored in this.val. if val != this.val, an update
-                        // was made during the timer period and should be sent
-                        // to the server.
-                        timeout = setTimeout(function() {
-                            if (val != statusVariable.val)
-                                _update();
-                            timeout = null;
-                        }, throttlePeriod);
-                    }
-
-                    function _update() {
-                        execs.forEach(function(exec) {
-                            connection.exec(
-                                system.id,
-                                moduleInstance.name,
-                                moduleInstance.index,
-                                exec.fn,
-                                exec.params()
-                            );
-                        });
-                    }
+                            // set a new timer that will fire after the throttling
+                            // period. any updates made during that time will be
+                            // stored in this.val. if val != this.val, an update
+                            // was made during the timer period and should be sent
+                            // to the server.
+                            timeout = setTimeout(function() {
+                                if (val != statusVariable.val)
+                                    _update();
+                                timeout = null;
+                            }, throttlePeriod);
+                        },
+                        _update = function () {
+                            execs.forEach(function(exec) {
+                                connection.exec(
+                                    system.id,
+                                    moduleInstance.name,
+                                    moduleInstance.index,
+                                    exec.fn,
+                                    exec.params()
+                                );
+                            });
+                        };
 
                     // ---------------------------
                     // initialisation
@@ -235,8 +291,9 @@
 
             function(StatusVariable) {
                 return function(name, index, varName, system, connection) {
-                    var moduleInstance = this;
-                    var statusVariables = [];
+                    var moduleInstance = this,
+                        statusVariables = [];
+
                     this.bindings = 0;
                     this.index = index;
                     this.name = name;
@@ -252,7 +309,7 @@
                         }
                         moduleInstance[name].bindings += 1;
                         return moduleInstance[name];
-                    }
+                    };
 
                     // on connection/reconnection every status variable is
                     // responsible for binding the new connection with the
@@ -261,7 +318,7 @@
                         statusVariables.forEach(function(statusVariable) {
                             statusVariable.bind();
                         });
-                    }
+                    };
 
                     this.unbind = function() {
                         moduleInstance.bindings -= 1;
@@ -271,7 +328,7 @@
                                 statusVariable.unbind();
                             });
                         }
-                    }
+                    };
                 }
             }
         ])
@@ -282,11 +339,10 @@
         // ------------------------------------------------------
         .factory('SystemFactory', [
             'ModuleInstanceFactory',
-            'growlNotifications',
             '$rootScope',
             'System',
-
-            function(ModuleInstance, growlNotifications, $rootScope, System) {
+            '$composer',
+            function(ModuleInstance, $rootScope, System, $composer) {
                 return function(name, connection) {
                     var moduleInstances = [],
                         system = this,
@@ -305,34 +361,34 @@
                         system.id = resp.id;
                         bind();
                     }, function(reason) {
-                        growlNotifications.add(
-                            'The system "' + name + '" could not be loaded, and may be misspelt.',
-                            'error'
-                        );
+                        if ($composer.debug)
+                            warnMsg('System "' + name + '" error', reason.statusText, reason.status);
+                        $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'The system "' + name + '" could not be loaded, please check your configuration.');
                     });
 
                     // on disconnection, all bindings will be forgotten. rebind
                     // once connected, and after we've retrieved the system's id
                     unbindRoot = $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
 
-                    function bind() {
-                        if (!connection.connected || system.id == null)
-                            return;
-                        moduleInstances.forEach(function(moduleInstance) {
-                            moduleInstance.bind();
-                        });
-                    }
-
-                    function unbind() {
-                        system.bindings -= 1;
-                        if (system.bindings === 0) {
-                            unbindRoot();
-                            delete connection[name];
+                    
+                    var bind = function() {
+                            if (!connection.connected || system.id == null)
+                                return;
                             moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.unbind();
+                                moduleInstance.bind();
                             });
-                        }
-                    }
+                        },
+                        unbind = function() {
+                            system.bindings -= 1;  // incremented in this.moduleInstance below
+
+                            if (system.bindings === 0) {
+                                unbindRoot();
+                                delete connection[name];
+                                moduleInstances.forEach(function(moduleInstance) {
+                                    moduleInstance.unbind();
+                                });
+                            }
+                        };
 
                     // bound status variables are stored on the system object
                     // and can be watched by elements. module_index is used
@@ -347,7 +403,7 @@
                         }
                         system[varName].bindings += 1;
                         return system[varName];
-                    }
+                    };
                 }
             }
         ])
@@ -372,142 +428,168 @@
                 // systems watch for the broadcast, and add their bindings when
                 // a connection becomes available. connections are pinged every
                 // n seconds to keep them alive.
-                var keepAliveInterval = null;
                 this.connected = false;
-                var connection = null;
-                var conductor = this;
 
-                function connect() {
-                    connection = new WebSocket($composer.ws);
-                    connection.onmessage = onmessage;
-                    connection.onclose = onclose;
-                    connection.onopen = onopen;
-                }
+                var keepAliveInterval = null,
+                    connection = null,
+                    conductor = this,
 
-                function reconnect() {
-                    if (connection == null || connection.readyState === connection.CLOSED)
-                        connect();
-                }
+                    connect = function() {
+                        connection = new WebSocket($composer.ws);
+                        connection.onmessage = onmessage;
+                        connection.onclose = onclose;
+                        connection.onopen = onopen;
+                    },
 
-                function startKeepAlive() {
-                    keepAliveInterval = window.setInterval(function() {
-                        connection.send(PING);
-                    }, KEEP_ALIVE_TIMER_SECONDS);
-                }
+                    reconnect = function () {
+                        if (connection == null || connection.readyState === connection.CLOSED)
+                            connect();
+                    },
 
-                function stopKeepAlive() {
-                    window.clearInterval(keepAliveInterval);
-                }
+                    startKeepAlive = function () {
+                        keepAliveInterval = window.setInterval(function() {
+                            connection.send(PING);
+                        }, KEEP_ALIVE_TIMER_SECONDS);
+                    },
 
-                function setConnected(state) {
-                    conductor.connected = state;
-                    $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
-                }
+                    stopKeepAlive = function () {
+                        window.clearInterval(keepAliveInterval);
+                    },
+
+                    setConnected = function (state) {
+                        if ($composer.debug) {
+                            debugMsg('Composer connected', state);
+                        }
+                        conductor.connected = state;
+                        $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
+                        $rootScope.$composerConnected = state;
+                    };
 
 
                 // ---------------------------
                 // event handlers
                 // ---------------------------
-                function onopen(evt) {
-                    setConnected(true);
-                    startKeepAlive();
-                }
+                var onopen = function (evt) {
+                        setConnected(true);
+                        startKeepAlive();
+                    },
 
-                function onclose(evt) {
-                    if (!conductor.connected)
-                        return;
-                    setConnected(false);
-                    connection = null;
-                    stopKeepAlive();
-                }
+                    onclose = function (evt) {
+                        if (!conductor.connected)
+                            return;
+                        setConnected(false);
+                        connection = null;
+                        stopKeepAlive();
+                    },
 
-                function onmessage(evt) {
-                    // message data will either be the string 'PONG', or json
-                    // data with an associated type
-                    if (evt.data == PONG)
-                        return;
-                    else
-                        var msg = JSON.parse(evt.data);
-
-                    // success, error and notify messages are all handled by
-                    // status variable instances. if meta is available (defining
-                    // the system id, module name, index and variable name)
-                    // attempt to retrieve a reference to the status variable
-                    // specified, before passing responsibility for handling the
-                    // message to it. if retrieval fails at any step (e.g because
-                    // no module instance matches the path specified by meta)
-                    // log debug information as the fail action.
-                    if (msg.type == SUCCESS || msg.type == ERROR || msg.type == NOTIFY) {
-                        var meta = msg.meta;
-                        if (!meta)
-                            return debugMsg('request - ' + msg.type, msg);
-
-                        var system = systemIDs[meta.sys];
-                        if (!system)
-                            return debugMsg(msg.type + ' received for unknown system', msg);
-
-                        var moduleInstance = system[meta.mod + '_' + meta.index];
-                        if (!moduleInstance)
-                            return debugMsg(msg.type + ' received for unknown module instance', msg);
-                        
-                        var statusVariable = moduleInstance[meta.name];
-                        if (!statusVariable)
-                            return debugMsg(msg.type + ' received for unknown status variable', msg);
-
-                        statusVariable[msg.type](msg);
-
-                    } else {
-                        if (msg.mod === 'anonymous') {
-                            //system_logger.fire(msg.msg, msg);
-                        } else {
-                            /*angular.forEach(debuggers[msg.mod], function (callback) {
-                                callback.fire(msg.msg, msg);
-                            });*/
+                    onmessage = function (evt) {
+                        // message data will either be the string 'PONG', or json
+                        // data with an associated type
+                        if (evt.data == PONG) {
+                            return;
+                        }
+                        else {
+                            var msg = JSON.parse(evt.data);
                         }
 
-                    }
-                }
+                        // success, error and notify messages are all handled by
+                        // status variable instances. if meta is available (defining
+                        // the system id, module name, index and variable name)
+                        // attempt to retrieve a reference to the status variable
+                        // specified, before passing responsibility for handling the
+                        // message to it. if retrieval fails at any step (e.g because
+                        // no module instance matches the path specified by meta)
+                        // log debug information as the fail action.
+                        if (msg.type == SUCCESS || msg.type == ERROR || msg.type == NOTIFY) {
+                            var meta = msg.meta;
+                            if (!meta) {
+                                if ($composer.debug) {
+                                    if (msg.type == SUCCESS) {
+                                        // NOTE:: exec requests don't pass back meta information
+                                        debugMsg(msg.type, msg);
+                                    } else {
+                                        warnMsg(msg.type, msg);
+                                    }
+                                }
+
+                                return;
+                            }
+
+                            var system = systemIDs[meta.sys];
+                            if (!system) {
+                                if ($composer.debug)
+                                    warnMsg(msg.type + ' received for unknown system', msg);
+
+                                return;
+                            }
+
+                            var moduleInstance = system[meta.mod + '_' + meta.index];
+                            if (!moduleInstance) {
+                                if ($composer.debug)
+                                    warnMsg(msg.type + ' received for unknown module instance', msg);
+
+                                return;
+                            }
+                            
+                            var statusVariable = moduleInstance[meta.name];
+                            if (!statusVariable) {
+                                if ($composer.debug)
+                                    warnMsg(msg.type + ' received for unknown status variable', msg);
+
+                                return;
+                            }
+
+                            statusVariable[msg.type](msg);
+
+                        } else if ($composer.debug) {
+                            warnMsg('Unknown message "' + msg.type + '"" received', msg);
+                        }
+                    };
 
 
                 // ---------------------------
                 // protocol
                 // ---------------------------
-                function sendRequest(type, system, module, index, name, args) {
-                    if (!conductor.connected)
-                        return false;
+                var sendRequest = function (type, system, module, index, name, args) {
+                        if (!conductor.connected)
+                            return false;
 
-                    req_id += 1;
+                        req_id += 1;
 
-                    var request = {
-                        id:     req_id,
-                        cmd:    type,
-                        sys:    system,
-                        mod:    module,
-                        index:  index,
-                        name:   name
+                        var request = {
+                            id:     req_id,
+                            cmd:    type,
+                            sys:    system,
+                            mod:    module,
+                            index:  index,
+                            name:   name
+                        };
+
+                        if (args !== undefined)
+                            request.args = args;
+
+                        connection.send(
+                            JSON.stringify(request)
+                        );
+
+                        if ($composer.debug) {
+                            debugMsg(type + ' request', request);
+                        }
+
+                        return true;
                     };
-
-                    if (args !== undefined)
-                        request.args = args;
-
-                    connection.send(
-                        JSON.stringify(request)
-                    );
-
-                    return true;
-                }
 
                 this.exec = function(system, module, index, func, args) {
                     return sendRequest(EXEC, system, module, index, func, args);
-                }
+                };
 
                 this.bind = function(system, module, index, name) {
                     return sendRequest(BIND, system, module, index, name);
-                }
+                };
 
                 this.unbind = function(system, module, index, name) {
                     return sendRequest(UNBIND, system, module, index, name);
-                }
+                };
 
 
                 // ---------------------------
@@ -521,15 +603,15 @@
                         systems[name] = new System(name, conductor);
                     systems[name].bindings += 1;
                     return systems[name];
-                }
+                };
 
                 this.removeSystem = function(name) {
                     delete systems[name];
-                }
+                };
 
                 this.setSystemID = function(name, id) {
                     systemIDs[id] = systems[name];
-                }
+                };
 
 
                 // ---------------------------
@@ -542,4 +624,4 @@
             }
         ]);
 
-}(this.WebSocket || this.MozWebSocket, this.jQuery, this.angular, this.debug));
+}(this.WebSocket || this.MozWebSocket, this.angular, this.debug));
