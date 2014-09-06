@@ -16,6 +16,30 @@
                 value: value,
                 writable: true
             };
+        },
+
+        findAndWatch = function ($scope, binding, callback) {
+            var found = false,
+                parentcount = 0,
+                scope = $scope;
+
+            // search for the value through parent scopes
+            do {
+                if (scope[binding] !== undefined) {
+                    found = true;
+                } else {
+                    parentcount += 1;
+                    scope = scope.$parent;
+                }
+            } while (!found && scope);
+
+            // if not found we fall through to watch on the local scope
+            while (found && parentcount > 0) {
+                binding = '$parent.' + binding;
+                parentcount -= 1;
+            }
+
+            $scope.$watch(binding, callback);
         };
 
     angular.module('Composer')
@@ -38,7 +62,7 @@
                     var moduleType = match[1],
                         scopeVar = match[2];
 
-                    $scope.$watch('coSystem', function (system) {
+                    findAndWatch($scope, 'coSystem', function (system) {
                         if (system) {
                             var setCount = function (data) {
 
@@ -91,7 +115,7 @@
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
-                    $scope.$watch('coSystem', function (system) {
+                    findAndWatch($scope, 'coSystem', function (system) {
                         if (system) {
                             var scopeVar = attrs.moduleList || 'moduleList',
                                 setModuleList = function (modList) {
@@ -240,7 +264,7 @@
                             // with index 1 when they're not needed (or are invalid), defer
                             // instantiation to bindings (when we know the final index value)
                             Object.defineProperty($scope, 'coModuleInstance', WITH_VAL(
-                                $scope.coSystem.moduleInstance(
+                                coSystem.moduleInstance(
                                     coModule,
                                     coIndex
                                 )
@@ -313,25 +337,30 @@
                                 $scope.$statusVariable.setMaxExecsPerSecond(attrs.maxEps);
                         };
 
-                    $scope.$watch('coSystem', function (value) {
-                        coSystem = value;
-                        checkCanBind();
-                    });
 
-                    $scope.$watch('coModule', function (value) {
-                        coModule = value;
-                        checkCanBind();
-                    });
+                    // Bust through any isolated scopes.
+                    // Next tick here gives time for values to be defined in parent scopes
+                    $timeout(function () {
+                        findAndWatch($scope, 'coSystem', function (value) {
+                            coSystem = value;
+                            checkCanBind();
+                        });
 
-                    $scope.$watch('coIndex', function (value) {
-                        coIndex = value;
-                        checkCanBind();
-                    });
+                        findAndWatch($scope, 'coModule', function (value) {
+                            coModule = value;
+                            checkCanBind();
+                        });
 
-                    $scope.$watch(attrs.coBind, function (value) {
-                        coBind = value;
-                        checkCanBind();
-                    });
+                        findAndWatch($scope, 'coIndex', function (value) {
+                            coIndex = value;
+                            checkCanBind();
+                        });
+
+                        $scope.$watch(attrs.coBind, function (value) {
+                            coBind = value;
+                            checkCanBind();
+                        });
+                    }, 0);
 
                     // Decrement the binding count when the element goes out of scope
                     $scope.$on('$destroy', performUnbind);
