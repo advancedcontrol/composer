@@ -14,7 +14,7 @@
 **/
 
 
-(function (WebSocket, angular, debug) {
+(function (angular, debug) {
     'use strict';
 
     // Request ID
@@ -59,7 +59,64 @@
         };
 
 
+
+    window.systemData = window.systemData || {};
+
+
     angular.module('Composer')
+
+
+        // emulate a subset of the API
+        .factory('System', ['$http', '$q', function ($http, $q) {
+            var getSystemData = function (id) {
+                var defer = $q.defer();
+
+                if (window.systemData[id] !== undefined) {
+                    defer.resolve(window.systemData[id]);
+                } else {
+                    // This is preferable for development
+                    defer.resolve(
+                        $http.get('/' + name + '.json', {headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/json'
+                        }})
+                    );
+                }
+                
+
+                return defer.promise;
+            };
+
+            return {
+                count: function (opts) {
+                    return {
+                        $promise: getSystemData(opts.id).then(function (resp) {
+                            // Grab module count
+                            if (resp[opts.module])
+                                return {count: resp[opts.module].length};
+                            else
+                                return {count: 0};
+                        })
+                    };
+                },
+
+                types: function (opts) {
+                    return {
+                        $promise: getSystemData(opts.id).then(function (resp) {
+                            // list modules
+                            return Object.keys(resp);
+                        })
+                    };
+                },
+
+                get: function (opts, func1, func2) {
+                    return {
+                        $promise: getSystemData(opts.id).then(func1, func2)
+                    };
+                }
+            }
+        }])
+
 
         // ------------------------------------------------------
         // status variables
@@ -123,7 +180,7 @@
                     };
 
                     this.unbind = function() {
-                        statusVariable.bindings -= 1;    // incremented in ModuleInstanceFactory.var below
+                        statusVariable.bindings -= 1;
 
                         if (statusVariable.bindings === 0) {
                             unbindRoot();
@@ -271,8 +328,7 @@
                     };
 
                     this.unbind = function() {
-                        moduleInstance.bindings -= 1;  // incremented in SystemFactory.moduleInstance below
-
+                        moduleInstance.bindings -= 1;
                         if (moduleInstance.bindings === 0) {
                             delete system[varName];
                             statusVariables.forEach(function(statusVariable) {
@@ -297,7 +353,7 @@
                 return function(name, connection) {
                     var moduleInstances = [],
                         system = this,
-                        unbindRoot;
+                        data;
 
                     this.bindings = 0;
                     this.id = null;
@@ -308,8 +364,10 @@
                     // conductor of the system's id so notify msgs can be routed
                     // to this system correctly
                     System.get({id: name}, function(resp) {
-                        connection.setSystemID(name, resp.id);
-                        system.id = resp.id;
+                        data = resp;
+
+                        connection.setSystemID(name, name);
+                        system.id = name;
                         bind();
                     }, function(reason) {
                         if ($composer.debug)
@@ -317,23 +375,16 @@
                         $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'The system "' + name + '" could not be loaded, please check your configuration.');
                     });
 
-                    // on disconnection, all bindings will be forgotten. rebind
-                    // once connected, and after we've retrieved the system's id
-                    unbindRoot = $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
-
                     
                     var bind = function() {
-                            if (!connection.connected || system.id == null)
-                                return;
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.bind();
                             });
                         },
                         unbind = function() {
-                            system.bindings -= 1;  // incremented in $conductor.system below
+                            system.bindings -= 1;  // incremented in this.moduleInstance below
 
                             if (system.bindings === 0) {
-                                unbindRoot();
                                 delete connection[name];
                                 moduleInstances.forEach(function(moduleInstance) {
                                     moduleInstance.unbind();
@@ -374,42 +425,12 @@
                 // ---------------------------
                 // connection
                 // ---------------------------
-                // web socket connection - connected is a public variable that
-                // can be queried. its state is broadcast through rootScope.
-                // systems watch for the broadcast, and add their bindings when
-                // a connection becomes available. connections are pinged every
-                // n seconds to keep them alive.
                 this.connected = false;
 
-                var keepAliveInterval = null,
-                    connection = null,
-                    conductor = this,
-
-                    connect = function() {
-                        connection = new WebSocket($composer.ws);
-                        connection.onmessage = onmessage;
-                        connection.onclose = onclose;
-                        connection.onopen = onopen;
-                    },
-
-                    reconnect = function () {
-                        if (connection == null || connection.readyState === connection.CLOSED)
-                            connect();
-                    },
-
-                    startKeepAlive = function () {
-                        keepAliveInterval = window.setInterval(function() {
-                            connection.send(PING);
-                        }, KEEP_ALIVE_TIMER_SECONDS);
-                    },
-
-                    stopKeepAlive = function () {
-                        window.clearInterval(keepAliveInterval);
-                    },
-
+                var conductor = this,
                     setConnected = function (state) {
                         if ($composer.debug) {
-                            debugMsg('Composer connected', state);
+                            debugMsg('Mock composer connected', state);
                         }
                         conductor.connected = state;
                         $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
@@ -418,128 +439,18 @@
 
 
                 // ---------------------------
-                // event handlers
-                // ---------------------------
-                var onopen = function (evt) {
-                        setConnected(true);
-                        startKeepAlive();
-                    },
-
-                    onclose = function (evt) {
-                        if (!conductor.connected)
-                            return;
-                        setConnected(false);
-                        connection = null;
-                        stopKeepAlive();
-                    },
-
-                    onmessage = function (evt) {
-                        // message data will either be the string 'PONG', or json
-                        // data with an associated type
-                        if (evt.data == PONG) {
-                            return;
-                        }
-                        else {
-                            var msg = JSON.parse(evt.data);
-                        }
-
-                        // success, error and notify messages are all handled by
-                        // status variable instances. if meta is available (defining
-                        // the system id, module name, index and variable name)
-                        // attempt to retrieve a reference to the status variable
-                        // specified, before passing responsibility for handling the
-                        // message to it. if retrieval fails at any step (e.g because
-                        // no module instance matches the path specified by meta)
-                        // log debug information as the fail action.
-                        if (msg.type == SUCCESS || msg.type == ERROR || msg.type == NOTIFY) {
-                            var meta = msg.meta;
-                            if (!meta) {
-                                if ($composer.debug) {
-                                    if (msg.type == SUCCESS) {
-                                        // NOTE:: exec requests don't pass back meta information
-                                        debugMsg(msg.type, msg);
-                                    } else {
-                                        warnMsg(msg.type, msg);
-                                    }
-                                }
-
-                                return;
-                            }
-
-                            var system = systemIDs[meta.sys];
-                            if (!system) {
-                                if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown system', msg);
-
-                                return;
-                            }
-
-                            var moduleInstance = system[meta.mod + '_' + meta.index];
-                            if (!moduleInstance) {
-                                if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown module instance', msg);
-
-                                return;
-                            }
-                            
-                            var statusVariable = moduleInstance[meta.name];
-                            if (!statusVariable) {
-                                if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown status variable', msg);
-
-                                return;
-                            }
-
-                            statusVariable[msg.type](msg);
-
-                        } else if ($composer.debug) {
-                            warnMsg('Unknown message "' + msg.type + '"" received', msg);
-                        }
-                    };
-
-
-                // ---------------------------
                 // protocol
                 // ---------------------------
-                var sendRequest = function (type, system, module, index, name, args) {
-                        if (!conductor.connected)
-                            return false;
-
-                        req_id += 1;
-
-                        var request = {
-                            id:     req_id,
-                            cmd:    type,
-                            sys:    system,
-                            mod:    module,
-                            index:  index,
-                            name:   name
-                        };
-
-                        if (args !== undefined)
-                            request.args = args;
-
-                        connection.send(
-                            JSON.stringify(request)
-                        );
-
-                        if ($composer.debug) {
-                            debugMsg(type + ' request', request);
-                        }
-
-                        return true;
-                    };
-
                 this.exec = function(system, module, index, func, args) {
-                    return sendRequest(EXEC, system, module, index, func, args);
+                    return true;
                 };
 
                 this.bind = function(system, module, index, name) {
-                    return sendRequest(BIND, system, module, index, name);
+                    return true;
                 };
 
                 this.unbind = function(system, module, index, name) {
-                    return sendRequest(UNBIND, system, module, index, name);
+                    return true;
                 };
 
 
@@ -565,14 +476,11 @@
                 };
 
 
-                // ---------------------------
-                // initialisation
-                // ---------------------------
-                // start a connection, and monitor the connection every n
-                // seconds, reconnecting if needed
-                window.setInterval(reconnect, RECONNECT_TIMER_SECONDS);
-                connect();
+                // Emulate a connection delay > 0
+                $timeout(function () {
+                    setConnected(true);
+                }, 100);
             }
         ]);
 
-}(this.WebSocket || this.MozWebSocket, this.angular, this.debug));
+}(this.angular, this.debug));

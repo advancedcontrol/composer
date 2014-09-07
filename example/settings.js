@@ -8,6 +8,14 @@
     //  is not required.
     //  
 
+
+    window.systemData = window.systemData || {};
+    window.systemData['System Name Here'] = {
+        Cam: [{power: true}],
+        Lights: [{}],
+        Projector: [{}, {}, {}]
+    };
+
     angular.module('Composer')
     
         .config(['$composerProvider', function(comms) {

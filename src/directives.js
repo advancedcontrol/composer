@@ -59,7 +59,7 @@
                         throw 'Expected in the form of indices-of="moduleType as scopeVar" but got indices-of="' + expression + '"';
                     }
 
-                    var moduleType = match[1],
+                    var modRaw = match[1],
                         scopeVar = match[2];
 
                     findAndWatch($scope, 'coSystem', function (system) {
@@ -70,8 +70,8 @@
                                     //  using an ng-repeat for setting module index values
                                     var i,
                                         indices = [];
-                                    for (i = 1; i === data.count; i += 1) {
-                                        indices.push(i);
+                                    for (i = 0; i < data.count; i += 1) {
+                                        indices.push(i + 1);
                                     }
 
                                     // On success update the list data
@@ -80,7 +80,8 @@
                                 },
                                 loadFailed = function (failed) {
                                     $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the number of "' + moduleType + '" in system "' + system.$name + '".');
-                                };
+                                },
+                                moduleType = $scope.$eval(modRaw);
 
                             system.$countOf = system.$countOf || {};
 
@@ -98,7 +99,7 @@
                                 // API Request
                                 system.$countOf[moduleType] = System.count({
                                     id: system.$name,
-                                    module: $scope.$eval(moduleType)
+                                    module: moduleType
                                 }).$promise;
                                 system.$countOf[moduleType].then(setCount, loadFailed);
                             }
