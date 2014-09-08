@@ -242,6 +242,7 @@
                         // These are the existing state
                         boundTo,
                         boundCounter,
+                        boundMod,
                         oldLocal,
                         varWatch,
                         localWatch,
@@ -259,8 +260,6 @@
                                 execUnreg = null;
 
                                 delete $scope[oldLocal];
-                                boundCounter = null;
-                                boundTo = null;
                                 oldLocal = null;
 
                                 $scope[boundCounter] -= 1;
@@ -271,6 +270,9 @@
                                     delete $scope[boundTo];
                                     delete $scope[boundCounter];
                                 }
+
+                                boundCounter = null;
+                                boundTo = null;
                             }
                         },
 
@@ -286,12 +288,19 @@
                                 pendingCheck = $timeout(function () {
                                     pendingCheck = null;
                                     if (coSystem && coModule && coIndex && coBind) {
-                                        boundTo = '$status_' + coBind;
-                                        boundCounter = '$status_' + coBind + '_bindings';
+                                        boundTo = '$stat_' + coBind;
+                                        boundCounter = '$stat_' + coBind + '_bindings';
+
+                                        if (boundMod && boundMod !== coModule) {
+                                            $scope.coModuleInstance.unbind();
+                                            delete $scope.coModuleInstance;
+                                        }
+
+                                        boundMod = coModule;
                                         oldLocal = localVar;
                                         performBinding();
                                     }
-                                }, 0, false); // we don't want to trigger another apply
+                                }, 0); // we don't want to trigger another apply
                             }
                         },
                         performBinding = function () {
@@ -446,7 +455,12 @@
                     }, 0);
 
                     // Decrement the binding count when the element goes out of scope
-                    $scope.$on('$destroy', performUnbind);
+                    $scope.$on('$destroy', function () {
+                        performUnbind();
+                        if ($scope.hasOwnProperty('coModuleInstance')) {
+                            $scope.coModuleInstance.unbind();
+                        }
+                    });
                 }
             };
         }]);
