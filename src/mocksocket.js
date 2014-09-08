@@ -40,7 +40,7 @@
     var CONNECTED_BROADCAST_EVENT    = '$conductor:connected',
         ERROR_BROADCAST_EVENT        = '$conductor:error',
         WARNING_BROADCAST_EVENT      = '$conductor:warning',
-        DEFAULT_MAX_EXECS_PER_SECOND = 5;
+        DEFAULT_MAX_EXECS_PER_SECOND = 20;
 
     // debug helpers
     var debugMsg = function (prefix, msg) {
@@ -111,7 +111,13 @@
 
                 get: function (opts, func1, func2) {
                     return {
-                        $promise: getSystemData(opts.id).then(func1, func2)
+                        $promise: getSystemData(opts.id).then(function (resp) {
+                            // Copy as we don't want to add id as a key to the object
+                            resp = angular.copy(resp);
+                            resp.id = opts.id;
+
+                            func1(resp);
+                        }, func2)
                     };
                 }
             }
@@ -132,6 +138,7 @@
                         serverVal = initVal,
                         lastSent = initVal,
                         execs = [],
+                        simpleExecs = [],
                         unbindRoot;   // used to clean up the watch on root scope
 
                     this.val = initVal;
@@ -147,17 +154,31 @@
                     // immediately because it's currently impossible to test
                     // whether two param functions are equivalent.
                     this.addExec = function(fn, params) {
-                        if (params.simple) {
-                            execs.forEach(function(exec) {
-                                if (exec.fn == fn && exec.params.simple)
-                                    return;
-                            });
-                        }
+                        var result,
+                            unreg = function () {
+                                if (params.simple) {
+                                    simpleExecs.pop();
+                                } else {
+                                    var index = execs.indexOf(result);
+                                    if (index >= 0) {
+                                        execs.splice(index, 1);
+                                    }
+                                }
+                            };
 
-                        execs.push({
+                        result = {
                             fn: fn,
                             params: params
-                        });
+                        };
+
+                        if (params.simple) {
+                            simpleExecs.push(result);
+                        } else {
+                            execs.push(result);
+                        }
+
+                        // Unregister function
+                        return unreg;
                     };
 
                     this.setMaxExecsPerSecond = function(maxExecs) {
@@ -221,33 +242,16 @@
                         }
                     };
 
-                    var update = function(val) {
-                            // ignore updates until a connection is available
-                            if (!system.id || !connection.connected)
-                                return;
-
-                            // return immediately if a timeout is waiting and will
-                            // handle the new value. this.val will be updated and
-                            // the timeout will send the value when it fires.
-                            if (timeout)
-                                return;
-
-                            // run each exec to update the server before the
-                            // throttling timer starts
-                            _update();
-
-                            // set a new timer that will fire after the throttling
-                            // period. any updates made during that time will be
-                            // stored in this.val. if val != this.val, an update
-                            // was made during the timer period and should be sent
-                            // to the server.
-                            timeout = setTimeout(function() {
-                                if (val != statusVariable.val)
-                                    _update();
-                                timeout = null;
-                            }, throttlePeriod);
-                        },
-                        _update = function () {
+                    var _update = function () {
+                            if (simpleExecs.length > 0) {
+                                simpleExecs[0].exec(
+                                    system.id,
+                                    moduleInstance.name,
+                                    moduleInstance.index,
+                                    simpleExecs[0].fn,
+                                    simpleExecs[0].params()
+                                );
+                            }
                             execs.forEach(function(exec) {
                                 connection.exec(
                                     system.id,
@@ -258,6 +262,29 @@
                                 );
                             });
                         };
+
+                    this.update = function(val) {
+                        // ignore updates until a connection is available
+                        if (!system.id || !connection.connected)
+                            return;
+
+                        // return immediately if a timeout is waiting and will
+                        // handle the new value. this.val will be updated and
+                        // the timeout will send the value when it fires.
+                        if (timeout)
+                            return;
+
+                        // set a new timer that will fire after the throttling
+                        // period.
+                        if (throttlePeriod > 0) {
+                            timeout = setTimeout(function() {
+                                _update();
+                                timeout = null;
+                            }, throttlePeriod);
+                        } else {
+                            _update();
+                        }
+                    };
 
                     // ---------------------------
                     // initialisation
@@ -353,7 +380,27 @@
                 return function(name, connection) {
                     var moduleInstances = [],
                         system = this,
-                        data;
+                        unbindRoot = angular.noop,
+                        data,
+
+                        bind = function() {
+                            if (!connection.connected || system.id == null)
+                                return;
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.bind();
+                            });
+                        },
+                        unbind = function() {
+                            system.bindings -= 1;  // incremented in this.moduleInstance below
+
+                            if (system.bindings === 0) {
+                                unbindRoot();
+                                delete connection[name];
+                                moduleInstances.forEach(function(moduleInstance) {
+                                    moduleInstance.unbind();
+                                });
+                            }
+                        };
 
                     this.bindings = 0;
                     this.id = null;
@@ -364,7 +411,7 @@
                     // conductor of the system's id so notify msgs can be routed
                     // to this system correctly
                     System.get({id: name}, function(resp) {
-                        data = resp;
+                        system.mockdata = resp;
 
                         connection.setSystemID(name, name);
                         system.id = name;
@@ -375,32 +422,21 @@
                         $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'The system "' + name + '" could not be loaded, please check your configuration.');
                     });
 
-                    
-                    var bind = function() {
-                            moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.bind();
-                            });
-                        },
-                        unbind = function() {
-                            system.bindings -= 1;  // incremented in this.moduleInstance below
 
-                            if (system.bindings === 0) {
-                                delete connection[name];
-                                moduleInstances.forEach(function(moduleInstance) {
-                                    moduleInstance.unbind();
-                                });
-                            }
-                        };
+                    // on disconnection, all bindings will be forgotten. rebind
+                    // once connected, and after we've retrieved the system's id
+                    unbindRoot = $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
+
 
                     // bound status variables are stored on the system object
                     // and can be watched by elements. module_index is used
                     // to scope the variables by a module instance. each instance
                     // stores status variables, so values can be retrieved
                     // through e.g system.Display_1.power.val
-                    this.moduleInstance = function(module, index) {
-                        var varName = module + '_' + index;
+                    this.moduleInstance = function(mod, index) {
+                        var varName = mod + '_' + index;
                         if (!system.hasOwnProperty(varName)) {
-                            system[varName] = new ModuleInstance(module, index, varName, system, connection);
+                            system[varName] = new ModuleInstance(mod, index, varName, system, connection);
                             moduleInstances.push(system[varName]);
                         }
                         system[varName].bindings += 1;
@@ -420,8 +456,9 @@
             '$timeout',
             '$safeApply',
             'SystemFactory',
-
             function ($rootScope, $composer, $timeout, $safeApply, System) {
+                var checkingData = null;
+
                 // ---------------------------
                 // connection
                 // ---------------------------
@@ -441,16 +478,128 @@
                 // ---------------------------
                 // protocol
                 // ---------------------------
-                this.exec = function(system, module, index, func, args) {
-                    return true;
+                var sendRequest = function (type, system, mod, index, name, args) {
+                        if (!conductor.connected)
+                            return false;
+
+                        req_id += 1;
+
+                        var request = {
+                            id:     req_id,
+                            cmd:    type,
+                            sys:    system,
+                            mod:    mod,
+                            index:  index,
+                            name:   name
+                        };
+
+                        if (args !== undefined)
+                            request.args = args;
+
+                        debugMsg(type + ' request', request);
+
+                        return request;
+                    };
+
+                this.exec = function(system, mod, index, func, args) {
+                    var res = sendRequest(EXEC, system, mod, index, func, args),
+                        data = systems[system].mockdata;
+
+                    index = index - 1;
+
+                    // Call any functions that are defined in the mock system
+                    if (res && data && data[mod] && data[mod][index] && data[mod][index]['$' + func]) {
+                        if (data[mod][index].$_self === undefined) {
+                            // Provide access to the system
+                            //  in case this is a logic module we are emulating
+                            data[mod][index].$_self = data;
+                        }
+                        data[mod][index]['$' + func].apply(data[mod][index], args);
+
+                        // Check the system for updates
+                        // Runs through all the data and looks for anything updated
+                        //  by the executing function above. It ignores special data
+                        //  id and anything starting with $ (function or self)
+                        if (checkingData === null) {
+                            checkingData = $timeout(function () {
+                                angular.forEach(systems, function(systemInst) {
+                                    var mods = systemInst.mockdata;
+
+                                    angular.forEach(mods, function(modArr, modname) {
+                                        if (modname === 'id') {
+                                            return;
+                                        }
+
+                                        angular.forEach(modArr, function(mod, index) {
+                                            var lookup = modname + '_' + (index + 1);
+
+                                            angular.forEach(mod, function(val, status) {
+                                                if (
+                                                    status.charAt(0) !== '$' &&
+                                                    !angular.equals(systemInst[lookup][status].val, val)
+                                                ) {
+                                                    systemInst[lookup][status][NOTIFY]({
+                                                        value: val,
+                                                        type: NOTIFY,
+                                                        meta: {
+                                                            sys: mods.id,
+                                                            mod: modname,
+                                                            index: index + 1,
+                                                            name: status
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                        });
+                                    });
+                                });
+
+                                checkingData = null;
+                            }, 0);
+                        }
+                    }
+
+                    return res;
                 };
 
-                this.bind = function(system, module, index, name) {
-                    return true;
+                this.bind = function(system, mod, index, name) {
+                    var res = sendRequest(BIND, system, mod, index, name),
+                        sys = systems[system],
+                        data = sys.mockdata,
+                        lookup = mod + '_' + index;
+
+                    index = index - 1;
+
+                    // Set initial values
+                    if (res && data && data[mod] && data[mod][index]) {
+                        // Assignment occurs after this function call so wait till next tick
+                        // to set the virtual server values (if they exist)
+                        $timeout(function () {
+                            if (name === 'connected' && !data[mod][index].hasOwnProperty(name)) {
+                                data[mod][index].connected = true;
+                            }
+
+
+                            var moduleInstance = sys[lookup],
+                                statusVariable = moduleInstance[name],
+                                value = data[mod][index][name] || statusVariable.val;
+
+
+                            if (value !== null && value !== undefined) {
+                                statusVariable[NOTIFY]({
+                                    value: value,
+                                    type: NOTIFY,
+                                    meta: res
+                                });
+                            }
+                        }, 0);
+                    }
+
+                    return res;
                 };
 
-                this.unbind = function(system, module, index, name) {
-                    return true;
+                this.unbind = function(system, mod, index, name) {
+                    return sendRequest(UNBIND, system, mod, index, name);
                 };
 
 
@@ -461,14 +610,25 @@
                 var systems = {};
 
                 this.system = function(name) {
-                    if (!systems[name])
-                        systems[name] = new System(name, conductor);
-                    systems[name].bindings += 1;
-                    return systems[name];
+                    var sys = systems[name] || systemIDs[name];
+
+                    if (!sys) {
+                        sys = new System(name, conductor);
+                        systems[name] = sys;
+                    }
+
+                    sys.bindings += 1;
+                    return sys;
                 };
 
                 this.removeSystem = function(name) {
-                    delete systems[name];
+                    var sys = systems[name] || systemIDs[name];
+                    if (sys) {
+                        delete systems[name];
+                        delete systems[sys.id];
+                        delete systemIDs[name];
+                        delete systemIDs[sys.id];
+                    }
                 };
 
                 this.setSystemID = function(name, id) {
@@ -479,7 +639,7 @@
                 // Emulate a connection delay > 0
                 $timeout(function () {
                     setConnected(true);
-                }, 100);
+                }, 50);
             }
         ]);
 

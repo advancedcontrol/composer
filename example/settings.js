@@ -11,7 +11,9 @@
 
     window.systemData = window.systemData || {};
     window.systemData['System Name Here'] = {
-        Cam: [{power: true}],
+        Cam: [{power: true, $power: function (pwr) {
+            this.connected = false;
+        }}],
         Lights: [{}],
         Projector: [{}, {}, {}]
     };

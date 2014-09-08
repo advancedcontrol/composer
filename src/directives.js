@@ -234,17 +234,51 @@
                     var coSystem,
                         coModule,
                         coIndex,
+
+                        // These are the new state
                         coBind,
+                        localVar,
+
+                        // These are the existing state
+                        boundTo,
+                        boundCounter,
+                        oldLocal,
+                        varWatch,
+                        localWatch,
+                        execUnreg,
                         performUnbind = function () {
-                            if ($scope.hasOwnProperty('$statusVariable')) {
-                                $scope.$statusVariable.unbind();
-                                $scope.$statusVariable = null;
+                            if (boundTo) {
+                                // stop watching
+                                varWatch();
+                                localWatch();
+                                if (execUnreg) {
+                                    execUnreg();
+                                }
+                                varWatch = null;
+                                localWatch = null;
+                                execUnreg = null;
+
+                                delete $scope[oldLocal];
+                                boundCounter = null;
+                                boundTo = null;
+                                oldLocal = null;
+
+                                $scope[boundCounter] -= 1;
+
+                                // Don't clean up variables if shared
+                                if ($scope[boundCounter] === 0) {
+                                    $scope[boundTo].unbind();
+                                    delete $scope[boundTo];
+                                    delete $scope[boundCounter];
+                                }
                             }
                         },
 
                         // Status binding
                         pendingCheck,
                         checkCanBind = function () {
+                            performUnbind();
+
                             if (!pendingCheck && coSystem && coModule && coIndex && coBind) {
 
                                 // Timeout as both coModule and coIndex may have changed
@@ -252,7 +286,9 @@
                                 pendingCheck = $timeout(function () {
                                     pendingCheck = null;
                                     if (coSystem && coModule && coIndex && coBind) {
-                                        performUnbind();
+                                        boundTo = '$status_' + coBind;
+                                        boundCounter = '$status_' + coBind + '_bindings';
+                                        oldLocal = localVar;
                                         performBinding();
                                     }
                                 }, 0, false); // we don't want to trigger another apply
@@ -264,12 +300,15 @@
                             // a required directive. to avoid instantiating module instances
                             // with index 1 when they're not needed (or are invalid), defer
                             // instantiation to bindings (when we know the final index value)
-                            Object.defineProperty($scope, 'coModuleInstance', WITH_VAL(
-                                coSystem.moduleInstance(
-                                    coModule,
-                                    coIndex
-                                )
-                            ));
+
+                            if (!$scope.hasOwnProperty('coModuleInstance')) {
+                                Object.defineProperty($scope, 'coModuleInstance', WITH_VAL(
+                                    coSystem.moduleInstance(
+                                        coModule,
+                                        coIndex
+                                    )
+                                ));
+                            }
 
                             // Set the initial value if any
                             var initVal = null;
@@ -279,9 +318,35 @@
                             }
 
                             // instantiate or get a reference to the status variable
-                            Object.defineProperty($scope, '$statusVariable', WITH_VAL(
-                                $scope.coModuleInstance.var(coBind, initVal)
-                            ));
+                            if (!$scope.hasOwnProperty(boundTo)) {
+                                Object.defineProperty($scope, boundTo, WITH_VAL(
+                                    $scope.coModuleInstance.var(coBind, initVal)
+                                ));
+                                Object.defineProperty($scope, boundCounter, WITH_VAL(1));
+                            } else {
+                                $scope[boundCounter] += 1;
+                            }
+
+                            // Make the value available to the local variable
+                            var serverVal,
+                                lastLocal;
+
+                            varWatch = $scope.$watch(boundTo + '.val', function (value) {
+                                serverVal = value;
+                                lastLocal = value;
+                                $scope[oldLocal] = value;
+                            });
+
+                            localWatch = $scope.$watch(oldLocal, function (newval) {
+                                if (newval != serverVal || newval != lastLocal) {
+                                    lastLocal = newval;
+                                    $scope[boundTo].update(newval);
+                                }
+                            });
+
+                            // override default exec throttling if provided
+                            if (attrs.hasOwnProperty('maxEps'))
+                                $scope[boundTo].setMaxExecsPerSecond(attrs.maxEps);
 
                             // execFn and execParams are used to inform the server of updates
                             // to the status variable being bound. updates are either ignored,
@@ -298,7 +363,7 @@
                                 // construct the exec call from the variable name alone
                                 var execFn = coBind;
                                 var execParams = function() {
-                                    return [$scope.$statusVariable.val];
+                                    return [$scope[boundTo].val];
                                 }
 
                                 // indicate execParams is for a simple execFn and only
@@ -311,6 +376,11 @@
                                 // params. parts[0] is the full string, [1] is fn name,
                                 // [2] is params
                                 var parts = attrs.exec.match(FUNCTION_RE);
+                                if (!parts) {
+                                    // TODO:: Should possibly be a debug instead
+                                    throw 'Invalid exec function. Expected in the form of exec="func(arg1, arg2)" but got exec="' + attrs.exec + '"';
+                                }
+
                                 var execFn = parts[1];
                                 
                                 // given a string of params, extract an array of each of
@@ -324,18 +394,12 @@
                                 }
                             }
 
-                            // elements can bind to name.val, e.g power.val
-                            $scope[coBind] = $scope.$statusVariable;
-
                             // let the variable we exist (so we can receive success
                             // and error notifications), and tell it how to send
                             // updates to the variable's value
-                            if (execFn)
-                                $scope.$statusVariable.addExec(execFn, execParams, initVal);
-
-                            // override default exec throttling if provided
-                            if (attrs.hasOwnProperty('maxEps'))
-                                $scope.$statusVariable.setMaxExecsPerSecond(attrs.maxEps);
+                            if (execFn) {
+                                execUnreg = $scope[boundTo].addExec(execFn, execParams, initVal);
+                            }
                         };
 
 
@@ -357,10 +421,28 @@
                             checkCanBind();
                         });
 
-                        $scope.$watch(attrs.coBind, function (value) {
-                            coBind = value;
-                            checkCanBind();
-                        });
+
+                        // Allows 
+                        //  co-bind="'ServerVal' as localVar"
+                        // or
+                        //  co-bind="'ServerVal'"
+                        var expression = attrs.coBind,
+                            match = expression.match(COUNT_RE);
+
+                        if (match) {
+                            localVar = match[2]
+
+                            $scope.$watch(match[1], function (value) {
+                                coBind = value;
+                                checkCanBind();
+                            });
+                        } else {
+                            $scope.$watch(attrs.coBind, function (value) {
+                                coBind = value;
+                                localVar = value;
+                                checkCanBind();
+                            });
+                        }
                     }, 0);
 
                     // Decrement the binding count when the element goes out of scope

@@ -40,7 +40,7 @@
     var CONNECTED_BROADCAST_EVENT    = '$conductor:connected',
         ERROR_BROADCAST_EVENT        = '$conductor:error',
         WARNING_BROADCAST_EVENT      = '$conductor:warning',
-        DEFAULT_MAX_EXECS_PER_SECOND = 5;
+        DEFAULT_MAX_EXECS_PER_SECOND = 20;
 
     // debug helpers
     var debugMsg = function (prefix, msg) {
@@ -75,6 +75,7 @@
                         serverVal = initVal,
                         lastSent = initVal,
                         execs = [],
+                        simpleExecs = [],
                         unbindRoot;   // used to clean up the watch on root scope
 
                     this.val = initVal;
@@ -90,17 +91,31 @@
                     // immediately because it's currently impossible to test
                     // whether two param functions are equivalent.
                     this.addExec = function(fn, params) {
-                        if (params.simple) {
-                            execs.forEach(function(exec) {
-                                if (exec.fn == fn && exec.params.simple)
-                                    return;
-                            });
-                        }
+                        var result,
+                            unreg = function () {
+                                if (params.simple) {
+                                    simpleExecs.pop();
+                                } else {
+                                    var index = execs.indexOf(result);
+                                    if (index >= 0) {
+                                        execs.splice(index, 1);
+                                    }
+                                }
+                            };
 
-                        execs.push({
+                        result = {
                             fn: fn,
                             params: params
-                        });
+                        };
+
+                        if (params.simple) {
+                            simpleExecs.push(result);
+                        } else {
+                            execs.push(result);
+                        }
+
+                        // Unregister function
+                        return unreg;
                     };
 
                     this.setMaxExecsPerSecond = function(maxExecs) {
@@ -164,33 +179,17 @@
                         }
                     };
 
-                    var update = function(val) {
-                            // ignore updates until a connection is available
-                            if (!system.id || !connection.connected)
-                                return;
 
-                            // return immediately if a timeout is waiting and will
-                            // handle the new value. this.val will be updated and
-                            // the timeout will send the value when it fires.
-                            if (timeout)
-                                return;
-
-                            // run each exec to update the server before the
-                            // throttling timer starts
-                            _update();
-
-                            // set a new timer that will fire after the throttling
-                            // period. any updates made during that time will be
-                            // stored in this.val. if val != this.val, an update
-                            // was made during the timer period and should be sent
-                            // to the server.
-                            timeout = setTimeout(function() {
-                                if (val != statusVariable.val)
-                                    _update();
-                                timeout = null;
-                            }, throttlePeriod);
-                        },
-                        _update = function () {
+                    var _update = function () {
+                            if (simpleExecs.length > 0) {
+                                simpleExecs[0].exec(
+                                    system.id,
+                                    moduleInstance.name,
+                                    moduleInstance.index,
+                                    simpleExecs[0].fn,
+                                    simpleExecs[0].params()
+                                );
+                            }
                             execs.forEach(function(exec) {
                                 connection.exec(
                                     system.id,
@@ -201,6 +200,29 @@
                                 );
                             });
                         };
+
+                    this.update = function(val) {
+                        // ignore updates until a connection is available
+                        if (!system.id || !connection.connected)
+                            return;
+
+                        // return immediately if a timeout is waiting and will
+                        // handle the new value. this.val will be updated and
+                        // the timeout will send the value when it fires.
+                        if (timeout)
+                            return;
+
+                        // set a new timer that will fire after the throttling
+                        // period.
+                        if (throttlePeriod > 0) {
+                            timeout = setTimeout(function() {
+                                _update();
+                                timeout = null;
+                            }, throttlePeriod);
+                        } else {
+                            _update();
+                        }
+                    };
 
                     // ---------------------------
                     // initialisation
@@ -216,7 +238,7 @@
                         // and the last value we requested 
                         if (newval != serverVal || newval != lastSent) {
                             lastSent = newval;
-                            update(newval);
+                            statusVariable.update(newval);
                         }
                     });
 
@@ -297,7 +319,25 @@
                 return function(name, connection) {
                     var moduleInstances = [],
                         system = this,
-                        unbindRoot;
+                        unbindRoot = angular.noop,
+                        bind = function() {
+                            if (!connection.connected || system.id == null)
+                                return;
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.bind();
+                            });
+                        },
+                        unbind = function() {
+                            system.bindings -= 1;  // incremented in $conductor.system below
+
+                            if (system.bindings === 0) {
+                                unbindRoot();
+                                delete connection[name];
+                                moduleInstances.forEach(function(moduleInstance) {
+                                    moduleInstance.unbind();
+                                });
+                            }
+                        };
 
                     this.bindings = 0;
                     this.id = null;
@@ -321,35 +361,15 @@
                     // once connected, and after we've retrieved the system's id
                     unbindRoot = $rootScope.$on(CONNECTED_BROADCAST_EVENT, bind);
 
-                    
-                    var bind = function() {
-                            if (!connection.connected || system.id == null)
-                                return;
-                            moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.bind();
-                            });
-                        },
-                        unbind = function() {
-                            system.bindings -= 1;  // incremented in $conductor.system below
-
-                            if (system.bindings === 0) {
-                                unbindRoot();
-                                delete connection[name];
-                                moduleInstances.forEach(function(moduleInstance) {
-                                    moduleInstance.unbind();
-                                });
-                            }
-                        };
-
                     // bound status variables are stored on the system object
                     // and can be watched by elements. module_index is used
                     // to scope the variables by a module instance. each instance
                     // stores status variables, so values can be retrieved
                     // through e.g system.Display_1.power.val
-                    this.moduleInstance = function(module, index) {
-                        var varName = module + '_' + index;
+                    this.moduleInstance = function(mod, index) {
+                        var varName = mod + '_' + index;
                         if (!system.hasOwnProperty(varName)) {
-                            system[varName] = new ModuleInstance(module, index, varName, system, connection);
+                            system[varName] = new ModuleInstance(mod, index, varName, system, connection);
                             moduleInstances.push(system[varName]);
                         }
                         system[varName].bindings += 1;
@@ -501,7 +521,7 @@
                 // ---------------------------
                 // protocol
                 // ---------------------------
-                var sendRequest = function (type, system, module, index, name, args) {
+                var sendRequest = function (type, system, mod, index, name, args) {
                         if (!conductor.connected)
                             return false;
 
@@ -511,7 +531,7 @@
                             id:     req_id,
                             cmd:    type,
                             sys:    system,
-                            mod:    module,
+                            mod:    mod,
                             index:  index,
                             name:   name
                         };
@@ -530,16 +550,16 @@
                         return true;
                     };
 
-                this.exec = function(system, module, index, func, args) {
-                    return sendRequest(EXEC, system, module, index, func, args);
+                this.exec = function(system, mod, index, func, args) {
+                    return sendRequest(EXEC, system, mod, index, func, args);
                 };
 
-                this.bind = function(system, module, index, name) {
-                    return sendRequest(BIND, system, module, index, name);
+                this.bind = function(system, mod, index, name) {
+                    return sendRequest(BIND, system, mod, index, name);
                 };
 
-                this.unbind = function(system, module, index, name) {
-                    return sendRequest(UNBIND, system, module, index, name);
+                this.unbind = function(system, mod, index, name) {
+                    return sendRequest(UNBIND, system, mod, index, name);
                 };
 
 
@@ -550,14 +570,25 @@
                 var systems = {};
 
                 this.system = function(name) {
-                    if (!systems[name])
-                        systems[name] = new System(name, conductor);
-                    systems[name].bindings += 1;
-                    return systems[name];
+                    var sys = systems[name] || systemIDs[name];
+
+                    if (!sys) {
+                        sys = new System(name, conductor);
+                        systems[name] = sys;
+                    }
+
+                    sys.bindings += 1;
+                    return sys;
                 };
 
                 this.removeSystem = function(name) {
-                    delete systems[name];
+                    var sys = systems[name] || systemIDs[name];
+                    if (sys) {
+                        delete systems[name];
+                        delete systems[sys.id];
+                        delete systemIDs[name];
+                        delete systemIDs[sys.id];
+                    }
                 };
 
                 this.setSystemID = function(name, id) {
