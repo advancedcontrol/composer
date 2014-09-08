@@ -13,10 +13,10 @@ This example dynamically creates a power toggle button for all the projectors in
 <div co-system="'System Name'">
     <div indices-of="'Projector' as projectors" co-module="'Projector'">
         <div ng-repeat="pj in projectors">
-            <button co-index="pj" co-bind="'power'" exec ng-click="power.val = !power.val">
+            <button co-index="pj" co-bind="'power'" exec ng-click="power = !power">
                 Power
-                <span ng-if="power.val">Off</span>
-                <span ng-if="!power.val">On</span>
+                <span ng-if="power">Off</span>
+                <span ng-if="!power">On</span>
             </button>
         </div>
     </div>
