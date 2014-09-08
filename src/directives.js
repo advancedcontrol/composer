@@ -291,9 +291,12 @@
                                         boundTo = '$stat_' + coBind;
                                         boundCounter = '$stat_' + coBind + '_bindings';
 
+                                        // Ensure unbinding is required
                                         if (boundMod && boundMod !== coModule) {
-                                            $scope.coModuleInstance.unbind();
-                                            delete $scope.coModuleInstance;
+                                            if ($scope.coModuleInstance && $scope.coModuleInstance.name !== coModule) {
+                                                $scope.coModuleInstance.unbind();
+                                                delete $scope.coModuleInstance;
+                                            }
                                         }
 
                                         boundMod = coModule;
