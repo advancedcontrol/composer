@@ -389,8 +389,9 @@
             '$timeout',
             '$safeApply',
             'SystemFactory',
+            '$comms'
 
-            function ($rootScope, $composer, $timeout, $safeApply, System) {
+            function ($rootScope, $composer, $timeout, $safeApply, System, $comms) {
                 // ---------------------------
                 // connection
                 // ---------------------------
@@ -406,10 +407,21 @@
                     conductor = this,
 
                     connect = function() {
-                        connection = new WebSocket($composer.ws);
-                        connection.onmessage = onmessage;
-                        connection.onclose = onclose;
-                        connection.onopen = onopen;
+                        // Connect to the websocket with an access token
+                        if ($composer.service) {
+                            $comms.getToken($composer.service)
+                            .then(function (token) {
+                                connection = new WebSocket($composer.ws + '?bearer_token=' + token);
+                                connection.onmessage = onmessage;
+                                connection.onclose = onclose;
+                                connection.onopen = onopen;
+                            });
+                        } else {
+                            connection = new WebSocket($composer.ws);
+                            connection.onmessage = onmessage;
+                            connection.onclose = onclose;
+                            connection.onopen = onopen;
+                        }
                     },
 
                     reconnect = function () {

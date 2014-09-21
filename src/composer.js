@@ -20,7 +20,7 @@
     angular.module('Composer', ['ngResource', 'SafeApply']).
 
         // isolated circular progress bar
-        provider('$composer', [function () {
+        provider('$composer', ['$commsProvider', function ($commsProvider) {
             var self = this;
 
             this.endpoint = '/control/';
@@ -28,6 +28,13 @@
             this.port = undefined;
             this.tls = undefined;
             this.debug = false;
+
+            this.useService = function (options) {
+                $commsProvider.service(options);
+                self.endpoint = options.api_endpoint;
+                self.service = options.id;
+            };
+            
 
             this.$get = ['$location', function ($location) {
                 var host  = self.host || $location.host(),
@@ -67,7 +74,8 @@
                     port: port,
                     http: http_endpoint,
                     ws: ws_endpoint,
-                    debug: debug
+                    debug: debug,
+                    service: self.service
                 };
             }];
         }]);
