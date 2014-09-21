@@ -31,7 +31,6 @@
 
             this.useService = function (options) {
                 $commsProvider.service(options);
-                self.endpoint = options.api_endpoint;
                 self.service = options.id;
             };
             

@@ -12,7 +12,7 @@
         <link rel="stylesheet" href="style.css">
     </head>
     <body ng-app="Composer">
-        <main co-system="'System Name Here'">
+        <main co-system="'sys-B0'">
 
             <!--
                 module-list: This grabs the list of module types in a system
@@ -54,25 +54,38 @@
                 </div>
             </div>
 
+            <button ng-init="change='Lights'" ng-click="change = 'Cam'">Change</button>
+            <div co-module="change" co-bind="'connected' as network">
+                {{network}}
+                as a different value:
+                <span co-bind="'connected'">{{connected}}</span>
+            </div>
+
         </main>
 
-        <script src="../bower_components/angular/angular.js"></script>
-        <script src="../bower_components/angular-resource/angular-resource.js"></script>
-        <script src="../bower_components/angular-safeapply/safe-apply.js"></script>
+        <!-- Hidden iframe for background oauth -->
+        <div class="background-oauth" co-auth provider="AcaEngine" login-type="Directed" login="developer"></div>
 
-        <script src="../src/ba-debug.js"></script>
-        <script src="../src/composer.js"></script>
+        <script src="/angular/angular.js"></script>
+        <script src="/angular-resource/angular-resource.js"></script>
+        <script src="/angular-safeapply/safe-apply.js"></script>
+        <script src="/co-storage/storage.js"></script>
+        <script src="/oauth-interceptor/intercept/communication.js"></script>
+        <script src="/oauth-interceptor/intercept/providers/coauth.js"></script>
 
+        <script src="/ba-debug.js"></script>
+        <script src="/composer.js"></script>
+
+        
+        <script src="/resources.js"></script>
+        <script src="/websocket.js"></script>
         <!--
             Replace Mocksocket with these for testing against live systems
-            <script src="../src/resources.js"></script>
-            <script src="../src/websocket.js"></script>
+        <script src="/mocksocket.js"></script>
         -->
-        <script src="../src/mocksocket.js"></script>
-
-        <script src="../src/directives.js"></script>
+        <script src="/directives.js"></script>
 
         <!-- Optional settings -->
-        <script src="settings.js"></script>
+        <script src="/settings.js"></script>
     </body>
 </html>
