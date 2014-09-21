@@ -389,7 +389,7 @@
             '$timeout',
             '$safeApply',
             'SystemFactory',
-            '$comms'
+            '$comms',
 
             function ($rootScope, $composer, $timeout, $safeApply, System, $comms) {
                 // ---------------------------
