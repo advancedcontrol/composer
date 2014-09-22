@@ -80,6 +80,7 @@
                                 },
                                 loadFailed = function (failed) {
                                     $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the number of "' + moduleType + '" in system "' + system.$name + '".');
+                                    $scope[scopeVar] = [];  // Invalidate any existing data
                                 },
                                 moduleType = $scope.$eval(modRaw);
 
@@ -125,6 +126,7 @@
                                 },
                                 loadFailed = function () {
                                     $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the list of modules in system "' + $scope.coSystem.$name + '".');
+                                    $scope[scopeVar] = [];  // Invalidate any existing data
                                 };
 
                             // Check if cached - avoid hitting the API if we don't need to
