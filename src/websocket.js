@@ -456,8 +456,10 @@
                             debugMsg('Composer connected', state);
                         }
                         conductor.connected = state;
-                        $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
-                        $rootScope.$composerConnected = state;
+                        $rootScope.$safeApply(function () {
+                            $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
+                            $rootScope.$composerConnected = state;
+                        });
                     };
 
 
