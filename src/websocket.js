@@ -138,6 +138,8 @@
                     };
 
                     this.unbind = function(force) {
+                        if (connection === null) return;
+
                         statusVariable.bindings -= 1;    // incremented in ModuleInstanceFactory.var below
 
                         if (force || statusVariable.bindings <= 0) {
@@ -152,6 +154,7 @@
                             if (timeout) {
                                 clearTimeout(timeout);
                             }
+                            connection = null;
                         }
                     };
 
@@ -293,6 +296,8 @@
                     };
 
                     this.unbind = function(force) {
+                        if (statusVariables === null) return;
+
                         moduleInstance.bindings -= 1;  // incremented in SystemFactory.moduleInstance below
 
                         if (force || moduleInstance.bindings <= 0) {
@@ -300,6 +305,8 @@
                             statusVariables.forEach(function(statusVariable) {
                                 statusVariable.unbind('force');
                             });
+                            statusVariables = null;
+                            moduleInstance.var = null;
                         }
                     };
                 }
@@ -332,14 +339,19 @@
                     this.id = null;
                     this.$name = name;
                     this.unbind = function() {
+                        if (connection === null) return;
+                        
                         system.bindings -= 1;  // incremented in $conductor.system below
 
                         if (system.bindings <= 0) {
                             unbindRoot();
-                            delete connection[name];
+                            connection.removeSystem(name);
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.unbind('force');
                             });
+                            connection = null;
+                            moduleInstances = null;
+                            system.moduleInstance = null;
                         }
                     };
                     
