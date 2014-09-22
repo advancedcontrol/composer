@@ -375,7 +375,7 @@
                                 // construct the exec call from the variable name alone
                                 var execFn = coBind;
                                 var execParams = function() {
-                                    return [$scope[boundTo].val];
+                                    return [$scope[localVar]];
                                 }
 
                                 // indicate execParams is for a simple execFn and only
