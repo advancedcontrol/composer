@@ -334,7 +334,7 @@
                     this.unbind = function() {
                         system.bindings -= 1;  // incremented in $conductor.system below
 
-                        if (system.bindings === 0) {
+                        if (system.bindings <= 0) {
                             unbindRoot();
                             delete connection[name];
                             moduleInstances.forEach(function(moduleInstance) {
