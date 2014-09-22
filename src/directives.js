@@ -259,6 +259,7 @@
                                 localWatch = null;
                                 execUnreg = null;
 
+                                delete $scope.coModuleInstance;
                                 delete $scope[oldLocal];
                                 oldLocal = null;
 
