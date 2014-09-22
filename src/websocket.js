@@ -182,7 +182,7 @@
 
                     var _update = function () {
                             if (simpleExecs.length > 0) {
-                                simpleExecs[0].exec(
+                                connection.exec(
                                     system.id,
                                     moduleInstance.name,
                                     moduleInstance.index,
