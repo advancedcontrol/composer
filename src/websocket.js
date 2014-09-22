@@ -326,22 +326,22 @@
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.bind();
                             });
-                        },
-                        unbind = function() {
-                            system.bindings -= 1;  // incremented in $conductor.system below
-
-                            if (system.bindings === 0) {
-                                unbindRoot();
-                                delete connection[name];
-                                moduleInstances.forEach(function(moduleInstance) {
-                                    moduleInstance.unbind();
-                                });
-                            }
                         };
 
                     this.bindings = 0;
                     this.id = null;
                     this.$name = name;
+                    this.unbind = function() {
+                        system.bindings -= 1;  // incremented in $conductor.system below
+
+                        if (system.bindings === 0) {
+                            unbindRoot();
+                            delete connection[name];
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.unbind();
+                            });
+                        }
+                    };
                     
 
                     // API calls use the system id rather than system name. inform
