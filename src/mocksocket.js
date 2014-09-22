@@ -76,7 +76,7 @@
                 } else {
                     // This is preferable for development
                     defer.resolve(
-                        $http.get('/' + name + '.json', {headers: {
+                        $http.get('/' + id + '.json', {headers: {
                             'Content-Type': 'application/json',
                             Accept: 'application/json'
                         }})
@@ -201,6 +201,8 @@
                     };
 
                     this.unbind = function() {
+                        if (connection === null) return;
+
                         statusVariable.bindings -= 1;
 
                         if (statusVariable.bindings === 0) {
@@ -215,6 +217,7 @@
                             if (timeout) {
                                 clearTimeout(timeout);
                             }
+                            connection = null;
                         }
                     };
 
@@ -244,7 +247,7 @@
 
                     var _update = function () {
                             if (simpleExecs.length > 0) {
-                                simpleExecs[0].exec(
+                                connection.exec(
                                     system.id,
                                     moduleInstance.name,
                                     moduleInstance.index,
@@ -355,12 +358,17 @@
                     };
 
                     this.unbind = function() {
+                        if (statusVariables === null) return;
+
                         moduleInstance.bindings -= 1;
+
                         if (moduleInstance.bindings === 0) {
                             delete system[varName];
                             statusVariables.forEach(function(statusVariable) {
                                 statusVariable.unbind();
                             });
+                            statusVariables = null;
+                            moduleInstance.var = null;
                         }
                     };
                 }
@@ -389,22 +397,27 @@
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.bind();
                             });
-                        },
-                        unbind = function() {
-                            system.bindings -= 1;  // incremented in this.moduleInstance below
-
-                            if (system.bindings === 0) {
-                                unbindRoot();
-                                delete connection[name];
-                                moduleInstances.forEach(function(moduleInstance) {
-                                    moduleInstance.unbind();
-                                });
-                            }
                         };
 
                     this.bindings = 0;
                     this.id = null;
                     this.$name = name;
+                    this.unbind = function() {
+                        if (connection === null) return;
+                        
+                        system.bindings -= 1;  // incremented in this.moduleInstance below
+
+                        if (system.bindings === 0) {
+                            unbindRoot();
+                            connection.removeSystem(name);
+                            moduleInstances.forEach(function(moduleInstance) {
+                                moduleInstance.unbind();
+                            });
+                            connection = null;
+                            moduleInstances = null;
+                            system.moduleInstance = null;
+                        }
+                    };
                     
 
                     // API calls use the system id rather than system name. inform
