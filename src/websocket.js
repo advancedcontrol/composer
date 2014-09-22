@@ -137,10 +137,10 @@
                         );
                     };
 
-                    this.unbind = function() {
+                    this.unbind = function(force) {
                         statusVariable.bindings -= 1;    // incremented in ModuleInstanceFactory.var below
 
-                        if (statusVariable.bindings === 0) {
+                        if (force || statusVariable.bindings <= 0) {
                             unbindRoot();
                             delete moduleInstance[name];
                             connection.unbind(
@@ -292,13 +292,13 @@
                         });
                     };
 
-                    this.unbind = function() {
+                    this.unbind = function(force) {
                         moduleInstance.bindings -= 1;  // incremented in SystemFactory.moduleInstance below
 
-                        if (moduleInstance.bindings === 0) {
+                        if (force || moduleInstance.bindings <= 0) {
                             delete system[varName];
                             statusVariables.forEach(function(statusVariable) {
-                                statusVariable.unbind();
+                                statusVariable.unbind('force');
                             });
                         }
                     };
@@ -338,7 +338,7 @@
                             unbindRoot();
                             delete connection[name];
                             moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.unbind();
+                                moduleInstance.unbind('force');
                             });
                         }
                     };
