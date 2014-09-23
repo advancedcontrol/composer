@@ -18,14 +18,15 @@
             };
         },
 
-        findAndWatch = function ($scope, binding, callback) {
+        findAndWatch = function ($scope, binding, callback, actual) {
             var found = false,
                 parentcount = 0,
-                scope = $scope;
+                scope = $scope,
+                actual = actual || binding;
 
             // search for the value through parent scopes
             do {
-                if (scope[binding] !== undefined) {
+                if (scope[actual] !== undefined) {
                     found = true;
                 } else {
                     parentcount += 1;
@@ -39,7 +40,13 @@
                 parentcount -= 1;
             }
 
-            $scope.$watch(binding, callback);
+            if (binding === actual) {
+                $scope.$watch(binding, callback);
+            } else {
+                $scope.$watch(binding, function (value) {
+                    callback($scope[actual]);
+                });
+            }
         };
 
     angular.module('Composer')
@@ -62,8 +69,8 @@
                     var modRaw = match[1],
                         scopeVar = match[2];
 
-                    findAndWatch($scope, 'coSystem', function (system) {
-                        if (system) {
+                    findAndWatch($scope, 'coSystem.id', function (system) {
+                        if (system && system.id) {
                             var setCount = function (data) {
 
                                     // Create an array of indices so we can iterate over them
@@ -104,8 +111,10 @@
                                 }).$promise;
                                 system.$countOf[moduleType].then(setCount, loadFailed);
                             }
+                        } else {
+                            $scope[scopeVar] = [];
                         }
-                    });
+                    }, 'coSystem');
                 }
             };
         }])
@@ -117,8 +126,8 @@
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
-                    findAndWatch($scope, 'coSystem', function (system) {
-                        if (system) {
+                    findAndWatch($scope, 'coSystem.id', function (system) {
+                        if (system && system.id) {
                             var scopeVar = attrs.moduleList || 'moduleList',
                                 setModuleList = function (modList) {
                                     system.$moduleList = modList;
@@ -144,8 +153,10 @@
                                 system.$moduleList = System.types({id: system.$name}).$promise;
                                 system.$moduleList.then(setModuleList, loadFailed);
                             }
+                        } else {
+                            $scope[scopeVar] = [];
                         }
-                    });
+                    }, 'coSystem');
                 }
             };
         }])
@@ -421,10 +432,15 @@
                     // Bust through any isolated scopes.
                     // Next tick here gives time for values to be defined in parent scopes
                     $timeout(function () {
-                        findAndWatch($scope, 'coSystem', function (value) {
-                            coSystem = value;
-                            checkCanBind();
-                        });
+                        findAndWatch($scope, 'coSystem.id', function (value) {
+                            if (value && value.id) {
+                                coSystem = value;
+                                checkCanBind();
+                            } else if (coSystem) {
+                                coSystem = null;
+                                performUnbind();
+                            }
+                        }, 'coSystem');
 
                         findAndWatch($scope, 'coModule', function (value) {
                             coModule = value;
