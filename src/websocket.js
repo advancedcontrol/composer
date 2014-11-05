@@ -312,7 +312,7 @@
                     
                     // This provides a programmatic way to execute functions
                     this.exec = function () {
-                        var args = Array.slice(arguments),
+                        var args = Array.prototype.slice.call(arguments),
                             func = args.shift();
 
                         connection.exec(
