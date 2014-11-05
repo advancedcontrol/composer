@@ -374,7 +374,7 @@
                     
                     // This provides a programmatic way to execute functions
                     this.exec = function () {
-                        var args = Array.slice(arguments),
+                        var args = Array.prototype.slice.call(arguments),
                             func = args.shift();
 
                         connection.exec(
@@ -563,6 +563,8 @@
                                             angular.forEach(mod, function(val, status) {
                                                 if (
                                                     status.charAt(0) !== '$' &&
+                                                    systemInst[lookup] &&
+                                                    systemInst[lookup][status] &&
                                                     !angular.equals(systemInst[lookup][status].val, val)
                                                 ) {
                                                     systemInst[lookup][status][NOTIFY]({
