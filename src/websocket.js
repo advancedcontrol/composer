@@ -309,6 +309,20 @@
                             moduleInstance.var = null;
                         }
                     };
+                    
+                    // This provides a programmatic way to execute functions
+                    this.exec = function () {
+                        var args = Array.slice(arguments),
+                            func = args.shift();
+
+                        connection.exec(
+                            system.id,
+                            moduleInstance.name,
+                            moduleInstance.index,
+                            func,
+                            args
+                        );
+                    };
                 }
             }
         ])
