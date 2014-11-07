@@ -159,7 +159,7 @@
                                 if (params.simple) {
                                     simpleExecs.pop();
                                 } else {
-                                    var index = execs.$_indexOf(result);
+                                    var index = execs.indexOf(result);
                                     if (index >= 0) {
                                         execs.splice(index, 1);
                                     }
@@ -368,7 +368,7 @@
                                 statusVariable.unbind();
                             });
                             statusVariables = null;
-                            moduleInstance.var = null;
+                            moduleInstance.$var = null;
                         }
                     };
                     
