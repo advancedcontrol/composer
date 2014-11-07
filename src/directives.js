@@ -308,7 +308,7 @@
                                         // Ensure unbinding is required
                                         if (boundMod && boundMod !== coModule) {
                                             if ($scope.coModuleInstance && $scope.coModuleInstance.name !== coModule) {
-                                                $scope.coModuleInstance.unbind();
+                                                $scope.coModuleInstance.$unbind();
                                                 delete $scope.coModuleInstance;
                                             }
                                         }
@@ -346,7 +346,7 @@
                             // instantiate or get a reference to the status variable
                             if (!$scope.hasOwnProperty(boundTo)) {
                                 Object.defineProperty($scope, boundTo, WITH_VAL(
-                                    $scope.coModuleInstance.var(coBind, initVal)
+                                    $scope.coModuleInstance.$var(coBind, initVal)
                                 ));
                                 Object.defineProperty($scope, boundCounter, WITH_VAL(1));
                             } else {
@@ -480,7 +480,7 @@
                     $scope.$on('$destroy', function () {
                         performUnbind();
                         if ($scope.hasOwnProperty('coModuleInstance')) {
-                            $scope.coModuleInstance.unbind();
+                            $scope.coModuleInstance.$unbind();
                         }
                     });
                 }

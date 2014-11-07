@@ -142,7 +142,7 @@
                         unbindRoot;   // used to clean up the watch on root scope
 
                     this.val = initVal;
-                    this.bindings = 0;
+                    this.$_bindings = 0;
 
 
                     // exec functions are sent to the server to update the
@@ -159,7 +159,7 @@
                                 if (params.simple) {
                                     simpleExecs.pop();
                                 } else {
-                                    var index = execs.indexOf(result);
+                                    var index = execs.$_indexOf(result);
                                     if (index >= 0) {
                                         execs.splice(index, 1);
                                     }
@@ -194,8 +194,8 @@
                     this.bind = function() {
                         connection.bind(
                             system.id,
-                            moduleInstance.name,
-                            moduleInstance.index,
+                            moduleInstance.$_name,
+                            moduleInstance.$_index,
                             name
                         );
                     };
@@ -203,15 +203,15 @@
                     this.unbind = function() {
                         if (connection === null) return;
 
-                        statusVariable.bindings -= 1;
+                        statusVariable.$_bindings -= 1;
 
-                        if (statusVariable.bindings === 0) {
+                        if (statusVariable.$_bindings === 0) {
                             unbindRoot();
                             delete moduleInstance[name];
                             connection.unbind(
                                 system.id,
-                                moduleInstance.name,
-                                moduleInstance.index,
+                                moduleInstance.$_name,
+                                moduleInstance.$_index,
                                 name
                             );
                             if (timeout) {
@@ -249,8 +249,8 @@
                             if (simpleExecs.length > 0) {
                                 connection.exec(
                                     system.id,
-                                    moduleInstance.name,
-                                    moduleInstance.index,
+                                    moduleInstance.$_name,
+                                    moduleInstance.$_index,
                                     simpleExecs[0].fn,
                                     simpleExecs[0].params()
                                 );
@@ -258,8 +258,8 @@
                             execs.forEach(function(exec) {
                                 connection.exec(
                                     system.id,
-                                    moduleInstance.name,
-                                    moduleInstance.index,
+                                    moduleInstance.$_name,
+                                    moduleInstance.$_index,
                                     exec.fn,
                                     exec.params()
                                 );
@@ -331,38 +331,38 @@
                     var moduleInstance = this,
                         statusVariables = [];
 
-                    this.bindings = 0;
-                    this.index = index;
-                    this.name = name;
+                    this.$_bindings = 0;
+                    this.$_index = index;
+                    this.$_name = name;
 
                     // find or instantiate a status variable associated with
                     // this model instance. there's no check or guarantee that
                     // the created status variable will correspond with a
                     // real status variable on the server.
-                    this.var = function(name, initVal) {
+                    this.$var = function(name, initVal) {
                         if (!moduleInstance.hasOwnProperty(name)) {
                             moduleInstance[name] = new StatusVariable(name, moduleInstance, system, connection, initVal);
                             statusVariables.push(moduleInstance[name]);
                         }
-                        moduleInstance[name].bindings += 1;
+                        moduleInstance[name].$_bindings += 1;
                         return moduleInstance[name];
                     };
 
                     // on connection/reconnection every status variable is
                     // responsible for binding the new connection with the
                     // variable so notify messages can be received.
-                    this.bind = function() {
+                    this.$bind = function() {
                         statusVariables.forEach(function(statusVariable) {
                             statusVariable.bind();
                         });
                     };
 
-                    this.unbind = function() {
+                    this.$unbind = function() {
                         if (statusVariables === null) return;
 
-                        moduleInstance.bindings -= 1;
+                        moduleInstance.$_bindings -= 1;
 
-                        if (moduleInstance.bindings === 0) {
+                        if (moduleInstance.$_bindings === 0) {
                             delete system[varName];
                             statusVariables.forEach(function(statusVariable) {
                                 statusVariable.unbind();
@@ -373,14 +373,14 @@
                     };
                     
                     // This provides a programmatic way to execute functions
-                    this.exec = function () {
+                    this.$exec = function () {
                         var args = Array.prototype.slice.call(arguments),
                             func = args.shift();
 
                         connection.exec(
                             system.id,
-                            moduleInstance.name,
-                            moduleInstance.index,
+                            moduleInstance.$_name,
+                            moduleInstance.$_index,
                             func,
                             args
                         );
@@ -409,23 +409,23 @@
                             if (!connection.connected || system.id == null)
                                 return;
                             moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.bind();
+                                moduleInstance.$bind();
                             });
                         };
 
-                    this.bindings = 0;
+                    this.$_bindings = 0;
                     this.id = null;
                     this.$name = name;
                     this.unbind = function() {
                         if (connection === null) return;
                         
-                        system.bindings -= 1;  // incremented in this.moduleInstance below
+                        system.$_bindings -= 1;  // incremented in this.moduleInstance below
 
-                        if (system.bindings === 0) {
+                        if (system.$_bindings === 0) {
                             unbindRoot();
                             connection.removeSystem(name);
                             moduleInstances.forEach(function(moduleInstance) {
-                                moduleInstance.unbind();
+                                moduleInstance.$unbind();
                             });
                             connection = null;
                             moduleInstances = null;
@@ -466,7 +466,7 @@
                             system[varName] = new ModuleInstance(mod, index, varName, system, connection);
                             moduleInstances.push(system[varName]);
                         }
-                        system[varName].bindings += 1;
+                        system[varName].$_bindings += 1;
                         return system[varName];
                     };
                 }
@@ -646,7 +646,7 @@
                         systems[name] = sys;
                     }
 
-                    sys.bindings += 1;
+                    sys.$_bindings += 1;
                     return sys;
                 };
 
