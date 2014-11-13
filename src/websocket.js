@@ -534,7 +534,7 @@
                                 return;
                             }
 
-                            var moduleInstance = system[meta.mod + '_' + meta.$_index];
+                            var moduleInstance = system[meta.mod + '_' + meta.index];
                             if (!moduleInstance) {
                                 if ($composer.debug)
                                     warnMsg(msg.type + ' received for unknown module instance', msg);
@@ -542,7 +542,7 @@
                                 return;
                             }
                             
-                            var statusVariable = moduleInstance[meta.$_name];
+                            var statusVariable = moduleInstance[meta.name];
                             if (!statusVariable) {
                                 if ($composer.debug)
                                     warnMsg(msg.type + ' received for unknown status variable', msg);
