@@ -1,5 +1,21 @@
-(function (angular) {
+(function (angular, window) {
     'use strict';
+    
+    // Splits up a module name defained as "ModName_1"
+    // Into {module: 'ModName', index: 1}
+    window.getModuleParts = function (key) {
+        var parts = key.split('_'),
+            index = parseInt(parts[parts.length - 1], 10),
+            module;
+
+        parts.splice(parts.length - 1, 1);
+        module = parts.join('_');
+
+        return {
+            module: module,
+            index: index
+        };
+    };
 
     var FUNCTION_RE = /(\w+)\((.+)\)/,
         PARAM_RE = /([\w\.]+)|('[^']+')/g,
@@ -201,8 +217,15 @@
                     // index may be overwritten by a co-index directive
                     $scope.$watch(attrs.coModule, function (value) {
                         if (value) {
-                            $scope.coModule = value;
                             Object.defineProperty($scope, 'coModule', WITH_VAL(value));
+                            
+                            // Allows modules to be defined as 'Module_index'
+                            // and the index is extracted from the module name
+                            if (attrs.hasOwnProperty('coImplicitIndex')) {
+                                var parts = window.getModuleParts($scope.coModule);
+                                $scope.coModule = parts.module;
+                                $scope.coIndex = parts.index;
+                            }
                         }
                     });
 
@@ -487,4 +510,4 @@
             };
         }]);
 
-}(this.angular));
+}(this.angular, this));
