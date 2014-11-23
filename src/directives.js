@@ -213,29 +213,30 @@
                 restrict: 'A',
                 scope: true,
                 link: function($scope, element, attrs) {
+                    Object.defineProperty($scope, 'coModule', WITH_VAL(null));
+
                     // store the string name and integer index of a module instance
                     // index may be overwritten by a co-index directive
                     $scope.$watch(attrs.coModule, function (value) {
                         if (value) {
-                            Object.defineProperty($scope, 'coModule', WITH_VAL(value));
-                            
-                            // Allows modules to be defined as 'Module_index'
-                            // and the index is extracted from the module name
                             if (attrs.hasOwnProperty('coImplicitIndex')) {
-                                var parts = window.getModuleParts($scope.coModule);
-                                $scope.coModule = parts.module;
-                                $scope.coIndex = parts.index;
+                                var parts = window.getModuleParts(value);
+                                Object.defineProperty($scope, 'coModule', WITH_VAL(parts.module));
+                                Object.defineProperty($scope, 'coIndex', WITH_VAL(parts.index));
+                            } else {
+                                Object.defineProperty($scope, 'coModule', WITH_VAL(value));
                             }
                         }
                     });
 
-                    Object.defineProperty($scope, 'coIndex', WITH_VAL(1));
                     if (attrs.index) {
                         $scope.$watch(attrs.index, function (value) {
                             if (value) {
-                                $scope.coIndex = value;
+                                Object.defineProperty($scope, 'coIndex', WITH_VAL(value));
                             }
                         });
+                    } else {
+                        Object.defineProperty($scope, 'coIndex', WITH_VAL(1));
                     }
                 }
             };
@@ -246,6 +247,7 @@
                 restrict: 'A',
                 scope: true,
                 link: function($scope, element, attrs) {
+                    Object.defineProperty($scope, 'coIndex', WITH_VAL(null));
                     $scope.$watch(attrs.coIndex, function (value) {
                         if (value) {
                             Object.defineProperty($scope, 'coIndex', WITH_VAL(value));
