@@ -336,7 +336,8 @@
             '$rootScope',
             'System',
             '$composer',
-            function(ModuleInstance, $rootScope, System, $composer) {
+            '$timeout',
+            function(ModuleInstance, $rootScope, System, $composer, $timeout) {
                 return function(name, connection) {
                     var moduleInstances = [],
                         system = this,
