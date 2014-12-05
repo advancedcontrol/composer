@@ -347,6 +347,25 @@
                             moduleInstances.forEach(function(moduleInstance) {
                                 moduleInstance.$bind();
                             });
+                        },
+
+                        retryTimer,
+                        getSystemID = function () {
+                            // API calls use the system id rather than system name. inform
+                            // conductor of the system's id so notify msgs can be routed
+                            // to this system correctly
+                            retryTimer = null;
+                            System.get({id: name}, function(resp) {
+                                connection.setSystemID(name, resp.id);
+                                system.id = resp.id;
+                                bind();
+                            }, function(reason) {
+                                if ($composer.debug)
+                                    warnMsg('System "' + name + '" error', reason.statusText, reason.status);
+                                $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'The system "' + name + '" could not be loaded, please check your configuration.');
+
+                                retryTimer = $timeout(getSystemID, 3500);
+                            });
                         };
 
                     this.$_bindings = 0;
@@ -369,19 +388,8 @@
                         }
                     };
                     
-
-                    // API calls use the system id rather than system name. inform
-                    // conductor of the system's id so notify msgs can be routed
-                    // to this system correctly
-                    System.get({id: name}, function(resp) {
-                        connection.setSystemID(name, resp.id);
-                        system.id = resp.id;
-                        bind();
-                    }, function(reason) {
-                        if ($composer.debug)
-                            warnMsg('System "' + name + '" error', reason.statusText, reason.status);
-                        $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'The system "' + name + '" could not be loaded, please check your configuration.');
-                    });
+                    // We want this to retry if it initially fails
+                    getSystemID();
 
                     // on disconnection, all bindings will be forgotten. rebind
                     // once connected, and after we've retrieved the system's id
