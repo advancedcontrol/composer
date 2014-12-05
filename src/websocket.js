@@ -373,6 +373,7 @@
                     this.id = null;
                     this.$name = name;
                     this.unbind = function() {
+                        if (retryTimer) $timeout.cancel(retryTimer);
                         if (connection === null) return;
                         
                         system.$_bindings -= 1;  // incremented in $conductor.system below
