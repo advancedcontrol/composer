@@ -70,8 +70,9 @@
         // Rest API based directives
         .directive('indicesOf', [
             'System', 
-            '$rootScope', 
-        function(System, $rootScope) {
+            '$rootScope',
+            '$parse',
+        function(System, $rootScope, $parse) {
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
@@ -83,7 +84,8 @@
                     }
 
                     var modRaw = match[1],
-                        scopeVar = match[2];
+                        scopeVar = match[2],
+                        varSetter = $parse(scopeVar).assign;
 
                     findAndWatch($scope, 'coSystem.id', function (system) {
                         if (system && system.id) {
@@ -99,11 +101,11 @@
 
                                     // On success update the list data
                                     system.$countOf[moduleType] = indices;
-                                    $scope[scopeVar] = indices;
+                                    varSetter($scope, indices);
                                 },
                                 loadFailed = function (failed) {
                                     $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the number of "' + moduleType + '" in system "' + system.$name + '".');
-                                    $scope[scopeVar] = [];  // Invalidate any existing data
+                                    varSetter($scope, []);  // Invalidate any existing data
                                 },
                                 moduleType = $scope.$eval(modRaw);
 
@@ -116,7 +118,7 @@
                                 if (system.$countOf[moduleType].hasOwnProperty('then')) {
                                     system.$countOf[moduleType].then(setCount, loadFailed);
                                 } else {
-                                    $scope[scopeVar] = system.$countOf[moduleType];
+                                    varSetter($scope, system.$countOf[moduleType]);
                                 }
                             } else {
 
@@ -128,7 +130,7 @@
                                 system.$countOf[moduleType].then(setCount, loadFailed);
                             }
                         } else {
-                            $scope[scopeVar] = [];
+                            varSetter($scope, []);
                         }
                     }, 'coSystem');
                 }
@@ -138,20 +140,22 @@
         .directive('moduleList', [
             'System',
             '$rootScope',
-        function(System, $rootScope) {
+            '$parse',
+        function(System, $rootScope, $parse) {
             return {
                 restrict: 'A',
                 link: function ($scope, element, attrs) {
                     findAndWatch($scope, 'coSystem.id', function (system) {
                         if (system && system.id) {
                             var scopeVar = attrs.moduleList || 'moduleList',
+                                varSetter = $parse(scopeVar).assign,
                                 setModuleList = function (modList) {
                                     system.$moduleList = modList;
-                                    $scope[scopeVar] = modList;
+                                    varSetter($scope, modList);
                                 },
                                 loadFailed = function () {
                                     $rootScope.$broadcast(ERROR_BROADCAST_EVENT, 'Error loading the list of modules in system "' + $scope.coSystem.$name + '".');
-                                    $scope[scopeVar] = [];  // Invalidate any existing data
+                                    varSetter($scope, []);  // Invalidate any existing data
                                 };
 
                             // Check if cached - avoid hitting the API if we don't need to
@@ -161,7 +165,7 @@
                                 if (system.$moduleList.hasOwnProperty('then')) {
                                     system.$moduleList.then(setModuleList, loadFailed);
                                 } else {
-                                    $scope[scopeVar] = $scope.coSystem.$moduleList;
+                                    varSetter($scope, $scope.coSystem.$moduleList);
                                 }
                             } else {
 
@@ -170,7 +174,7 @@
                                 system.$moduleList.then(setModuleList, loadFailed);
                             }
                         } else {
-                            $scope[scopeVar] = [];
+                            varSetter($scope, []);
                         }
                     }, 'coSystem');
                 }
@@ -282,6 +286,8 @@
                         boundCounter,
                         boundMod,
                         oldLocal,
+                        oldLocalSetter,
+                        oldLocalGetter,
                         varWatch,
                         localWatch,
                         execUnreg,
@@ -300,6 +306,8 @@
                                 delete $scope.coModuleInstance;
                                 delete $scope[oldLocal];
                                 oldLocal = null;
+                                oldLocalGetter = null;
+                                oldLocalSetter = null;
 
                                 $scope[boundCounter] -= 1;
 
@@ -340,6 +348,8 @@
 
                                         boundMod = coModule;
                                         oldLocal = localVar;
+                                        oldLocalGetter = $parse(localVar);
+                                        oldLocalSetter = oldLocalGetter.assign;
                                         performBinding();
                                     }
                                 }, 0); // we don't want to trigger another apply
@@ -385,7 +395,8 @@
                             varWatch = $scope.$watch(boundTo + '.val', function (value) {
                                 serverVal = value;
                                 lastLocal = value;
-                                $scope[oldLocal] = value;
+
+                                oldLocalSetter($scope, value);
                             });
 
                             localWatch = $scope.$watch(oldLocal, function (newval) {
@@ -414,7 +425,7 @@
                                 // construct the exec call from the variable name alone
                                 var execFn = coBind;
                                 var execParams = function() {
-                                    return [$scope[localVar]];
+                                    return [oldLocalGetter($scope)];
                                 }
 
                                 // indicate execParams is for a simple execFn and only
