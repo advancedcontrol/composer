@@ -18,7 +18,7 @@
     };
 
     var FUNCTION_RE = /(\w+)\((.+)\)/,
-        PARAM_RE = /([\w\.]+)|('[^']+')/g,
+        PARAM_RE = /[\S][^,\s][^,]*/g,
         COUNT_RE = /^\s*([\s\S]+?)\s+as\s+([\s\S]+?)\s*$/,
 
         // TODO:: duplicate variable in websocket. Should DRY this up.
