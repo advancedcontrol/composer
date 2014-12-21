@@ -303,7 +303,7 @@
                         // and the last value we requested 
                         if (newval != serverVal || newval != lastSent) {
                             lastSent = newval;
-                            update(newval);
+                            statusVariable.update(newval);
                         }
                     });
 
