@@ -385,6 +385,12 @@
                             args
                         );
                     };
+
+                    // Do we want to emulate debugging? Might be useful in the future..
+                    // not implemented currently.
+                    this.$debug = function (callback) {
+                        return angular.noop;
+                    };
                 }
             }
         ])

@@ -713,6 +713,8 @@
                     var instances = debugMappings[mod_id],
                         i;
 
+                    if (!instances) { return; }
+
                     for (i = 0; i < instances.length; i += 1) {
                         if (instances[i] === inst) {
                             instances.splice(i, 1);
