@@ -1,4 +1,4 @@
-(function (angular, window) {
+(function (angular, window, debug) {
     'use strict';
     
     // Splits up a module name defained as "ModName_1"
@@ -257,6 +257,49 @@
                             Object.defineProperty($scope, 'coIndex', WITH_VAL(value));
                         }
                     });
+                }
+            };
+        })
+
+
+        // Provides debugging output for the in-scope module
+        .directive('coDebug', function() {
+            return {
+                restrict: 'A',
+                scope: false,   // No new scope required
+                link: function($scope, element, attrs) {
+                    var mod,
+                        unregister,
+                        defaultCallback = function (message) {
+                            debug[message.level]($scope.coSystem.$name + ' -> ' + 
+                                $scope.coModule + '_' + $scope.coIndex + ': ' + 
+                                message.msg, message.klass, message.mod);
+                        },
+                        callback = $scope.$eval(attrs.coDebug) || defaultCallback,
+                        stopDebugging = function () {
+                            if (mod) {
+                                unregister();
+                                unregister = null;
+                                mod = null;
+                            }
+                        };
+
+                    $scope.$watch('coModuleInstance', function (newMod, oldMod) {
+                        stopDebugging();
+
+                        if (newMod) {
+                            mod = newMod;
+                            unregister = mod.$debug(function (message) {
+                                callback(message);
+                            });
+                        }
+                    });
+
+                    $scope.$watch(attrs.coDebug, function (value) {
+                        callback = value || defaultCallback;
+                    });
+
+                    $scope.$on('$destroy', stopDebugging);
                 }
             };
         })
@@ -523,4 +566,4 @@
             };
         }]);
 
-}(this.angular, this));
+}(this.angular, this, this.debug));

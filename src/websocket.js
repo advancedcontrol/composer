@@ -32,6 +32,7 @@
         SUCCESS = 'success',
         NOTIFY  = 'notify',
         DEBUG   = 'debug',
+        IGNORE  = 'ignore',
         EXEC    = 'exec',
         BIND    = 'bind',
         UNBIND  = 'unbind';
@@ -267,7 +268,17 @@
             function(StatusVariable) {
                 return function(name, index, varName, system, connection) {
                     var moduleInstance = this,
-                        statusVariables = [];
+                        statusVariables = [],
+                        debugCallbacks = [],
+                        stopDebugging = function () {
+                            // Stop debugging!
+                            connection.ignore(
+                                moduleInstance,
+                                system.id,
+                                debugId
+                            );
+                        },
+                        debugId;
 
                     this.$_bindings = 0;
                     this.$_index = index;
@@ -293,6 +304,14 @@
                         statusVariables.forEach(function(statusVariable) {
                             statusVariable.bind();
                         });
+
+                        if (debugCallbacks.length > 0) {
+                            connection.debug(
+                                system.id,
+                                moduleInstance.$_name,
+                                moduleInstance.$_index
+                            );
+                        }
                     };
 
                     this.$unbind = function(force) {
@@ -308,6 +327,10 @@
                             statusVariables = null;
                             moduleInstance.$var = null;
                         }
+
+                        if (debugCallbacks.length > 0) {
+                            stopDebugging();
+                        }
                     };
                     
                     // This provides a programmatic way to execute functions
@@ -322,6 +345,48 @@
                             func,
                             args
                         );
+                    };
+
+                    // Debugging for individual modules
+                    this.$debug = function (callback) {
+                        debugCallbacks.push(callback);
+
+                        if (debugCallbacks.length === 1) {
+                            // Start debugging!
+                            connection.debug(
+                                system.id,
+                                moduleInstance.$_name,
+                                moduleInstance.$_index
+                            );
+                        }
+                        
+                        // Return unregister function
+                        return function () {
+                            var i;
+
+                            for (i = 0; i < debugCallbacks.length; i += 1) {
+                                if (debugCallbacks[i] === callback) {
+                                    debugCallbacks.splice(i, 1);
+                                    break;
+                                }
+                            }
+
+                            if (debugCallbacks.length === 0) {
+                                stopDebugging();
+                            }
+                        };
+                    };
+
+                    this.__notifyDebug = function (msg) {
+                        var i;
+
+                        for (i = 0; i < debugCallbacks.length; i += 1) {
+                            debugCallbacks[i](msg);
+                        }
+                    };
+
+                    this.__setDebugId = function (mod_id) {
+                        debugId = mod_id;
                     };
                 }
             }
@@ -493,6 +558,7 @@
                 var onopen = function (evt) {
                         setConnected(true);
                         startKeepAlive();
+                        debugMappings = {};
                     },
 
                     onclose = function (evt) {
@@ -503,14 +569,17 @@
                         stopKeepAlive();
                     },
 
+                    debugMappings = {},
                     onmessage = function (evt) {
+                        var msg, meta, system, moduleInstance, statusVariable;
+
                         // message data will either be the string 'PONG', or json
                         // data with an associated type
                         if (evt.data == PONG) {
                             return;
                         }
                         else {
-                            var msg = JSON.parse(evt.data);
+                            msg = JSON.parse(evt.data);
                         }
 
                         // success, error and notify messages are all handled by
@@ -522,7 +591,7 @@
                         // no module instance matches the path specified by meta)
                         // log debug information as the fail action.
                         if (msg.type == SUCCESS || msg.type == ERROR || msg.type == NOTIFY) {
-                            var meta = msg.meta;
+                            meta = msg.meta;
                             if (!meta) {
                                 if ($composer.debug) {
                                     if (msg.type == SUCCESS) {
@@ -536,7 +605,8 @@
                                 return;
                             }
 
-                            var system = systemIDs[meta.sys];
+                            // Use the meta data to lookup what we need
+                            system = systemIDs[meta.sys];
                             if (!system) {
                                 if ($composer.debug)
                                     warnMsg(msg.type + ' received for unknown system', msg);
@@ -544,23 +614,43 @@
                                 return;
                             }
 
-                            var moduleInstance = system[meta.mod + '_' + meta.index];
+                            moduleInstance = system[meta.mod + '_' + meta.index];
                             if (!moduleInstance) {
                                 if ($composer.debug)
                                     warnMsg(msg.type + ' received for unknown module instance', msg);
 
                                 return;
                             }
-                            
-                            var statusVariable = moduleInstance[meta.name];
-                            if (!statusVariable) {
-                                if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown status variable', msg);
 
-                                return;
+                            // For debugging we need to add a further layer of mappings
+                            if (msg.mod_id) {
+                                // debug request success
+                                debugMappings[msg.mod_id] = debugMappings[msg.mod_id] || []
+                                debugMappings[msg.mod_id].push(moduleInstance);
+                                moduleInstance.__setDebugId(msg.mod_id);
+                                if ($composer.debug) {
+                                    // NOTE:: exec requests don't pass back meta information
+                                    debugMsg('receiving debug messages for', msg.mod_id, msg.meta);
+                                }
+
+                            } else {
+                                // Status variable binding
+                                statusVariable = moduleInstance[meta.name];
+                                if (!statusVariable) {
+                                    if ($composer.debug)
+                                        warnMsg(msg.type + ' received for unknown status variable', msg);
+
+                                    return;
+                                }
+
+                                statusVariable[msg.type](msg);
                             }
 
-                            statusVariable[msg.type](msg);
+                        } else if (msg.type == DEBUG) {
+
+                            angular.forEach(debugMappings[msg.mod], function (mod) {
+                                mod.__notifyDebug(msg);
+                            });
 
                         } else if ($composer.debug) {
                             warnMsg('Unknown message "' + msg.type + '"" received', msg);
@@ -610,6 +700,32 @@
 
                 this.unbind = function(system, mod, index, name) {
                     return sendRequest(UNBIND, system, mod, index, name);
+                };
+
+
+                // These used for debugging
+                this.debug = function(system, mod, index) {
+                    return sendRequest(DEBUG, system, mod, index, DEBUG);
+                };
+
+                // Might be modules in other systems that have the same module id
+                this.ignore = function(inst, system_id, mod_id) {
+                    var instances = debugMappings[mod_id],
+                        i;
+
+                    for (i = 0; i < instances.length; i += 1) {
+                        if (instances[i] === inst) {
+                            instances.splice(i, 1);
+                            break;
+                        }
+                    }
+
+                    // NOTE:: There is a possible race condition here between
+                    // debug and ignore... Might not be avoidable. It's only debugging.
+                    if (instances.length === 0) {
+                        delete debugMappings[mod_id];
+                        sendRequest(IGNORE, system_id, mod_id, null, IGNORE);
+                    }
                 };
 
 
