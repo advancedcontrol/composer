@@ -131,6 +131,45 @@
             return $resource($composer.http + 'api/zones/:id', {
                 id: '@id'
             }, common_crud);
+        }]).
+
+        factory('Log', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/logs/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('User', ['$composer', '$resource', '$rootScope', function ($composer, $resource, $rootScope) {
+            var custom = angular.extend({
+                'current': {
+                    method:'GET',
+                    headers: common_headers,
+                    url: $composer.http + 'api/users/current'
+                }
+            }, common_crud),
+
+            user = $resource($composer.http + 'api/users/:id', {
+                id: '@id',
+            }, custom),
+
+            current_user;
+
+            user.logged_in = function () {
+                return $comms.tryAuth($composer.service);
+            };
+
+            user.get_current = function (force) {
+                if (current_user === undefined || force !== undefined) {
+                    current_user = user.current().$promise.then(function (user) {
+                        $rootScope.currentUser = user;
+                        return user;
+                    });
+                }
+
+                return current_user;
+            }
+
+            return user;
         }]);
 
 }(this.angular));
