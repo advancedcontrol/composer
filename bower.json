@@ -1,13 +1,15 @@
 {
   "name": "composer",
   "main": ["src/ba-debug.js", "src/composer.js", "src/resources.js", "src/websocket.js", "src/directives.js"],
+  "ignore": [],
   "description": "",
   "dependencies": {
     "angular": "1.x",
     "angular-resource": "1.x",
 
     "angular-safeapply": "latest",
-    "oauth-interceptor": "latest"
+    "oauth-interceptor": "latest",
+    "spark-md5": "latest"
   },
   "devDependencies": {}
 }
