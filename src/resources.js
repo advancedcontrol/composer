@@ -139,6 +139,30 @@
             }, common_crud);
         }]).
 
+        factory('Authority', ['$http', '$q', function ($http, $q) {
+            var authority_defer,
+                auth = {};
+
+            auth.get_authority = function () {
+                if (authority_defer === undefined) {
+                    authority_defer = $q.defer();
+
+                    authority_defer.resolve($http.get('/auth/authority').then(function (authority) {
+                        auth.authority = authority;
+                        return authority;
+                    }, function (err) {
+                        // Some kind of error - we'll allow a retry
+                        authority_defer = undefined;
+                        return $q.reject(err);
+                    }));
+                }
+
+                return authority_defer.promise;
+            };
+
+            return auth;
+        }]).
+
         factory('User', ['$composer', '$resource', '$rootScope', function ($composer, $resource, $rootScope) {
             var custom = angular.extend({
                 'current': {
