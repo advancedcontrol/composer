@@ -46,7 +46,7 @@
                     return auth.login_url.replace('{{url}}', url);
                 } else {
                     // this means we should have multiple attempts at this in case of failure
-                    return Authority.get_authority().then(function (auth) {
+                    return Authority.get_authority().then(function (settings) {
                         auth = settings;
                         return redirect_function();
                     });
