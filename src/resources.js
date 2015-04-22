@@ -148,8 +148,8 @@
                     authority_defer = $q.defer();
 
                     authority_defer.resolve($http.get('/auth/authority').then(function (authority) {
-                        auth.authority = authority;
-                        return authority;
+                        auth.authority = authority.data;
+                        return authority.data;
                     }, function (err) {
                         // Some kind of error - we'll allow a retry
                         authority_defer = undefined;
