@@ -15,6 +15,8 @@
         .config([
             '$composerProvider',
         function ($comms) {
+            var redirect_uri = window.location.origin + '/oauth-resp.html';
+            
             $comms.debug = true;
 
             $comms.useService({
@@ -22,8 +24,8 @@
                 scope: 'public',
                 oauth_server: window.location.origin + '/auth/oauth/authorize',
                 oauth_tokens: window.location.origin + '/auth/token',
-                redirect_uri: window.location.origin + '/oauth-resp.html',
-                client_id: window.SparkMD5.hash(window.location.origin),
+                redirect_uri: redirect_uri,
+                client_id: window.SparkMD5.hash(redirect_uri),
                 api_endpoint: '/api/',
                 proactive: true,
                 login_redirect: function () {
