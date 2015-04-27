@@ -15,18 +15,17 @@
         .config([
             '$composerProvider',
         function ($comms) {
-            var name = 'CoreAppPublic',
-                redirect_uri = window.location.origin + '/oauth-resp.html';
+            var redirect_uri = window.location.origin + '/oauth-resp.html';
             
             $comms.debug = true;
 
             $comms.useService({
-                id: name,
+                id: 'AcaEngine',
                 scope: 'public',
                 oauth_server: window.location.origin + '/auth/oauth/authorize',
                 oauth_tokens: window.location.origin + '/auth/token',
                 redirect_uri: redirect_uri,
-                client_id: window.SparkMD5.hash(name + redirect_uri),
+                client_id: window.SparkMD5.hash(redirect_uri),
                 api_endpoint: '/api/',
                 proactive: true,
                 login_redirect: function () {
