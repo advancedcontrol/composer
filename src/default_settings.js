@@ -27,7 +27,6 @@
                 redirect_uri: redirect_uri,
                 client_id: window.SparkMD5.hash(redirect_uri),
                 api_endpoint: '/api/',
-                proactive: true,
                 login_redirect: function () {
                     return redirect_function();
                 }
