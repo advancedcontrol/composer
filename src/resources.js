@@ -81,7 +81,7 @@
             }, common_crud);
         }]).
 
-        factory('System', ['$composer', '$resource', function ($composer, $resource) {
+        factory('System', ['$composer', '$resource', '$http', function ($composer, $resource, $http) {
             var custom = angular.extend({
                     'funcs': {
                         method:'GET',
@@ -106,12 +106,19 @@
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/count'
                     }
-                }, common_crud);
+                }, common_crud),
+                res = $resource($composer.http + 'api/systems/:id/:task', {
+                    id: '@id',
+                    task: '@_task'
+                }, custom);
 
-            return $resource($composer.http + 'api/systems/:id/:task', {
-                id: '@id',
-                task: '@_task'
-            }, custom);
+            res.state = function (system, params) {
+                return $http.get($composer.http + 'api/systems/' + system + '/state', {
+                    params: params
+                });
+            };
+
+            return res;
         }]).
 
         factory('Dependency', ['$composer', '$resource', function ($composer, $resource) {
