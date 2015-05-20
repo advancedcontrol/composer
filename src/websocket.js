@@ -612,7 +612,7 @@
                             system = systemIDs[meta.sys];
                             if (!system) {
                                 if ($composer.debug)
-                                    warnMsg(msg.type + ' ' + msg.id + ' received for unknown system', meta);
+                                    warnMsg(msg.type + (msg.id ? (' ' + msg.id) : '') + ' received for unknown system', meta);
 
                                 return;
                             }
@@ -620,7 +620,7 @@
                             moduleInstance = system[meta.mod + '_' + meta.index];
                             if (!moduleInstance) {
                                 if ($composer.debug)
-                                    warnMsg(msg.type + ' ' + msg.id + ' received for unknown module instance', meta);
+                                    warnMsg(msg.type + (msg.id ? (' ' + msg.id) : '') + ' received for unknown module instance', meta);
 
                                 return;
                             }
@@ -641,7 +641,7 @@
                                 statusVariable = moduleInstance[meta.name];
                                 if (!statusVariable) {
                                     if ($composer.debug)
-                                        warnMsg(msg.type + ' ' + msg.id + ' received for unknown status variable', meta);
+                                        warnMsg(msg.type + (msg.id ? (' ' + msg.id) : '') + ' received for unknown status variable', meta);
 
                                     return;
                                 }
