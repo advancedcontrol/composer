@@ -130,6 +130,8 @@
                     // of changes to the variable's value. connection will receive
                     // the update and 
                     this.bind = function() {
+                        if (connection === null) return;
+                        
                         connection.bind(
                             system.id,
                             moduleInstance.$_name,
