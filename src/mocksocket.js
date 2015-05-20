@@ -519,7 +519,6 @@
                         req_id += 1;
 
                         var request = {
-                            cmd:    type,
                             sys:    system,
                             mod:    mod,
                             index:  index,
@@ -531,6 +530,7 @@
 
                         debugMsg(type + ' request ' + req_id, request);
                         request.id = req_id;
+                        request.cmd = type;
 
                         return request;
                     };

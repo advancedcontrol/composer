@@ -688,6 +688,7 @@
 
                         if ($composer.debug) {
                             delete request.id;
+                            delete request.cmd;
                             debugMsg(type + ' request ' + req_id, request);
                         }
 
