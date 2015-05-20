@@ -612,7 +612,7 @@
                             system = systemIDs[meta.sys];
                             if (!system) {
                                 if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown system', msg);
+                                    warnMsg(msg.type + ' ' + msg.id + ' received for unknown system', meta);
 
                                 return;
                             }
@@ -620,7 +620,7 @@
                             moduleInstance = system[meta.mod + '_' + meta.index];
                             if (!moduleInstance) {
                                 if ($composer.debug)
-                                    warnMsg(msg.type + ' received for unknown module instance', msg);
+                                    warnMsg(msg.type + ' ' + msg.id + ' received for unknown module instance', meta);
 
                                 return;
                             }
