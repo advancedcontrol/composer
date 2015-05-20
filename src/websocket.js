@@ -179,7 +179,7 @@
 
                     this.success = function(msg) {
                         if ($composer.debug) {
-                            debugMsg(msg.id + ' success', msg.meta);
+                            debugMsg('success ' + msg.id);
                         }
                     };
 
@@ -599,7 +599,7 @@
                                 if ($composer.debug) {
                                     if (msg.type == SUCCESS) {
                                         // NOTE:: exec requests don't pass back meta information
-                                        debugMsg(msg.type, msg);
+                                        debugMsg(msg.type + ' ' + msg.id);
                                     } else {
                                         warnMsg(msg.type, msg);
                                     }

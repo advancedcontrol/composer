@@ -239,7 +239,7 @@
 
                     this.success = function(msg) {
                         if ($composer.debug) {
-                            debugMsg(msg.id + ' success', msg.meta);
+                            debugMsg('success ' + msg.id);
                         }
                     };
 
