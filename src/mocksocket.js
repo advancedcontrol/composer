@@ -239,7 +239,7 @@
 
                     this.success = function(msg) {
                         if ($composer.debug) {
-                            debugMsg('success', msg);
+                            debugMsg(msg.id + ' success', msg.meta);
                         }
                     };
 
@@ -519,7 +519,6 @@
                         req_id += 1;
 
                         var request = {
-                            id:     req_id,
                             cmd:    type,
                             sys:    system,
                             mod:    mod,
@@ -530,7 +529,8 @@
                         if (args !== undefined)
                             request.args = args;
 
-                        debugMsg(type + ' request', request);
+                        debugMsg(type + ' request ' + req_id, request);
+                        request.id = req_id;
 
                         return request;
                     };

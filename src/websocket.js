@@ -179,7 +179,7 @@
 
                     this.success = function(msg) {
                         if ($composer.debug) {
-                            debugMsg('success', msg);
+                            debugMsg(msg.id + ' success', msg.meta);
                         }
                     };
 
@@ -687,7 +687,8 @@
                         );
 
                         if ($composer.debug) {
-                            debugMsg(type + ' request', request);
+                            delete request.id;
+                            debugMsg(type + ' request ' + req_id, request);
                         }
 
                         return true;
