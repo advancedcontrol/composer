@@ -633,7 +633,7 @@
                                 moduleInstance.__setDebugId(msg.mod_id);
                                 if ($composer.debug) {
                                     // NOTE:: exec requests don't pass back meta information
-                                    debugMsg('receiving debug messages for', msg.mod_id, msg.meta);
+                                    debugMsg('receiving debug messages for', msg.mod_id, meta);
                                 }
 
                             } else {
@@ -641,7 +641,7 @@
                                 statusVariable = moduleInstance[meta.name];
                                 if (!statusVariable) {
                                     if ($composer.debug)
-                                        warnMsg(msg.type + ' received for unknown status variable', msg);
+                                        warnMsg(msg.type + ' ' + msg.id + ' received for unknown status variable', meta);
 
                                     return;
                                 }
