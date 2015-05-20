@@ -161,12 +161,12 @@
 
                     this.notify = function(msg) {
                         if ($composer.debug) {
-                            debugMsg('notify', msg);
+                            debugMsg(msg.meta.sys + ' ' + msg.meta.mod + '_' + msg.meta.index + '.' + msg.meta.name, msg.value);
                         }
                         serverVal = msg.value;
                         lastSent = serverVal;
                         statusVariable.val = serverVal;
-                        $rootScope.$safeApply();
+                        $rootScope.$apply();
                     };
 
                     this.error = function(msg) {
@@ -174,7 +174,7 @@
                             warnMsg('error', msg);
                         }
                         $rootScope.$broadcast(WARNING_BROADCAST_EVENT, msg);
-                        $rootScope.$safeApply();
+                        $rootScope.$apply();
                     };
 
                     this.success = function(msg) {
@@ -422,9 +422,13 @@
                             // to this system correctly
                             retryTimer = null;
                             System.get({id: name}, function(resp) {
-                                connection.setSystemID(name, resp.id);
-                                system.id = resp.id;
-                                bind();
+                                if (connection) {
+                                    connection.setSystemID(name, resp.id);
+                                    system.id = resp.id;
+                                    bind();
+                                } else {
+                                    debugMsg('System changed before id received for ', name);
+                                }
                             }, function(reason) {
                                 if ($composer.debug)
                                     warnMsg('System "' + name + '" error', reason.statusText, reason.status);
@@ -488,11 +492,10 @@
             '$rootScope',
             '$composer',
             '$timeout',
-            '$safeApply',
             'SystemFactory',
             '$comms',
 
-            function ($rootScope, $composer, $timeout, $safeApply, System, $comms) {
+            function ($rootScope, $composer, $timeout, System, $comms) {
                 // ---------------------------
                 // connection
                 // ---------------------------
@@ -545,7 +548,7 @@
                             debugMsg('Composer connected', state);
                         }
                         conductor.connected = state;
-                        $rootScope.$safeApply(function () {
+                        $rootScope.$apply(function () {
                             $rootScope.$broadcast(CONNECTED_BROADCAST_EVENT, state);
                             $rootScope.$composerConnected = state;
                         });

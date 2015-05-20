@@ -223,12 +223,11 @@
 
                     this.notify = function(msg) {
                         if ($composer.debug) {
-                            debugMsg('notify', msg);
+                            debugMsg(msg.meta.sys + ' ' + msg.meta.mod + '_' + msg.meta.index + '.' + msg.meta.name, msg.value);
                         }
                         serverVal = msg.value;
                         lastSent = serverVal;
                         statusVariable.val = serverVal;
-                        $rootScope.$safeApply();
                     };
 
                     this.error = function(msg) {
@@ -236,7 +235,6 @@
                             warnMsg('error', msg);
                         }
                         $rootScope.$broadcast(WARNING_BROADCAST_EVENT, msg);
-                        $rootScope.$safeApply();
                     };
 
                     this.success = function(msg) {
@@ -444,11 +442,15 @@
                     // conductor of the system's id so notify msgs can be routed
                     // to this system correctly
                     System.get({id: name}, function(resp) {
-                        system.mockdata = resp;
+                        if (connection) {
+                            system.mockdata = resp;
 
-                        connection.setSystemID(name, name);
-                        system.id = name;
-                        bind();
+                            connection.setSystemID(name, name);
+                            system.id = name;
+                            bind();
+                        } else {
+                            debugMsg('System changed before id received for ', name);
+                        }
                     }, function(reason) {
                         if ($composer.debug)
                             warnMsg('System "' + name + '" error', reason.statusText, reason.status);
@@ -487,9 +489,8 @@
             '$rootScope',
             '$composer',
             '$timeout',
-            '$safeApply',
             'SystemFactory',
-            function ($rootScope, $composer, $timeout, $safeApply, System) {
+            function ($rootScope, $composer, $timeout, System) {
                 var checkingData = null;
 
                 // ---------------------------

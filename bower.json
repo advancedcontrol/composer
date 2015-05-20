@@ -7,7 +7,6 @@
     "angular": "1.x",
     "angular-resource": "1.x",
 
-    "angular-safeapply": "latest",
     "oauth-interceptor": "latest",
     "spark-md5": "latest"
   },
