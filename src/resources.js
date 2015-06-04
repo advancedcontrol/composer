@@ -86,8 +86,7 @@
                     'funcs': {
                         method:'GET',
                         headers: common_headers,
-                        url: $composer.http + 'api/systems/:id/funcs',
-                        isArray: true
+                        url: $composer.http + 'api/systems/:id/funcs'
                     },
                     'exec': {
                         method:'POST',
@@ -138,6 +137,45 @@
             return $resource($composer.http + 'api/zones/:id', {
                 id: '@id'
             }, common_crud);
+        }]).
+
+        factory('Trigger', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/triggers/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('SystemTrigger', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/system_trigger/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('Stats', ['$http', function ($http) {
+            var makeRequest = function (type, period) {
+                var args;
+                if (period) {
+                    args = {
+                        params: {
+                            period: period
+                        }
+                    };
+                }
+
+                return $http.get($composer.http + 'api/stats/' + type, args);
+            };
+
+            return {
+                connections: function (period) {
+                    return makeRequest('connections', period);
+                },
+                triggers: function (period) {
+                    return makeRequest('triggers', period);
+                },
+                offline: function (period) {
+                    return makeRequest('offline', period);
+                }
+            };
         }]).
 
         factory('Log', ['$composer', '$resource', function ($composer, $resource) {
