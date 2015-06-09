@@ -393,6 +393,9 @@
                                         oldLocal = localVar;
                                         oldLocalGetter = $parse(localVar);
                                         oldLocalSetter = oldLocalGetter.assign;
+                                        if (!oldLocalSetter) {
+                                            throw 'Invalid binding. Expected in the form of bind="expression as var_name" but got bind="' + coBind + ' as ' + localVar + '"';
+                                        }
                                         performBinding();
                                     }
                                 }, 0); // we don't want to trigger another apply
