@@ -56,6 +56,10 @@
         errorMsg = function (prefix, msg) {
             arguments[0] = (new Date()).toTimeString() + ' - ' + arguments[0] + ': ';
             debug.error.apply(debug, arguments);
+        },
+
+        getRandomInt = function (min, max) {
+            return Math.floor(Math.random() * (max - min)) + min;
         };
 
 
@@ -192,8 +196,6 @@
                     // of changes to the variable's value. connection will receive
                     // the update and 
                     this.bind = function() {
-                        if (connection === null) return;
-                        
                         connection.bind(
                             system.id,
                             moduleInstance.$_name,
@@ -630,7 +632,10 @@
                                     meta: res
                                 });
                             }
-                        }, 0);
+
+                            // Emulate request time. Random number as requests
+                            //  do not always come back in sequence either
+                        }, getRandomInt(50, 400));
                     }
 
                     return res;
