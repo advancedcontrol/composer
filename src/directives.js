@@ -484,6 +484,7 @@
                                 // params. parts[0] is the full string, [1] is fn name,
                                 // [2] is params
                                 var parts = attrs.exec.match(FUNCTION_RE);
+                                parts[2] = parts[2].trim();
                                 if (!parts) {
                                     // TODO:: Should possibly be a debug instead
                                     throw 'Invalid exec function. Expected in the form of exec="func(arg1, arg2)" but got exec="' + attrs.exec + '"';
@@ -491,10 +492,17 @@
 
                                 var execFn = parts[1];
                                 
-                                // given a string of params, extract an array of each of
-                                // the parameters, where params can be literal numbers,
-                                // variable names and single quoted strings
-                                var params = parts[2].match(PARAM_RE);
+                                
+                                if (parts[2][0] === '{' || parts[2][0] === '[') {
+                                    // Assumes a function with named params / hash or array
+                                    var params = [parts[2]];
+                                } else {
+                                    // given a string of params, extract an array of each of
+                                    // the parameters, where params can be literal numbers,
+                                    // variable names and single quoted strings
+                                    var params = parts[2].match(PARAM_RE);
+                                }
+
                                 var execParams = function() {
                                     return params.map(function(param) {
                                         return $scope.$eval(param);
