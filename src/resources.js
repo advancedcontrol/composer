@@ -151,7 +151,7 @@
             }, common_crud);
         }]).
 
-        factory('Stats', ['$http', function ($http) {
+        factory('Stats', ['$composer', '$http', function ($composer, $http) {
             var makeRequest = function (type, period) {
                 var args;
                 if (period) {
