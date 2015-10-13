@@ -81,7 +81,22 @@
             }, common_crud);
         }]).
 
-        factory('System', ['$composer', '$resource', '$http', function ($composer, $resource, $http) {
+        factory('Trigger', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/triggers/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('SystemTrigger', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/systems/:sys_id/triggers/:id', {
+                id: '@id',
+                sys_id: '@control_system_id'
+            }, common_crud);
+        }]).
+
+        factory('System', [
+            '$composer', '$resource', '$http', 'SystemTrigger',
+        function ($composer, $resource, $http, Trigger) {
             var custom = angular.extend({
                     'funcs': {
                         method:'GET',
@@ -117,6 +132,11 @@
                 });
             };
 
+            res.prototype.add_trigger = function (data) {
+                data.control_system_id = this.id;
+                return Trigger.create(data);
+            };
+
             return res;
         }]).
 
@@ -135,18 +155,6 @@
 
         factory('Zone', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/zones/:id', {
-                id: '@id'
-            }, common_crud);
-        }]).
-
-        factory('Trigger', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.http + 'api/triggers/:id', {
-                id: '@id'
-            }, common_crud);
-        }]).
-
-        factory('SystemTrigger', ['$composer', '$resource', function ($composer, $resource) {
-            return $resource($composer.http + 'api/system_trigger/:id', {
                 id: '@id'
             }, common_crud);
         }]).
