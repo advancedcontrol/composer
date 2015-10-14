@@ -209,6 +209,12 @@
                     authority_defer = $q.defer();
 
                     authority_defer.resolve($http.get('/auth/authority').then(function (authority) {
+                        // If there is no application at this location then let's
+                        // Throw a 404 as it is a better user experience
+                        if (authority.data == null) {
+                            window.location = '/404.html';
+                            throw "No Authority Found!";
+                        }
                         auth.authority = authority.data;
                         return authority.data;
                     }, function (err) {
