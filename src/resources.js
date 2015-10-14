@@ -88,10 +88,18 @@
         }]).
 
         factory('SystemTrigger', ['$composer', '$resource', function ($composer, $resource) {
+            var custom = angular.extend({}, common_crud);
+
+            custom.query = {
+                method: GET,
+                headers: common_headers,
+                url: $composer.http + 'api/system_triggers'
+            };
+
             return $resource($composer.http + 'api/systems/:sys_id/triggers/:id', {
                 id: '@id',
                 sys_id: '@control_system_id'
-            }, common_crud);
+            }, custom);
         }]).
 
         factory('System', [
