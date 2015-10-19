@@ -169,17 +169,24 @@
 
         factory('Stats', ['$composer', '$http', function ($composer, $http) {
             var makeRequest = function (type, period) {
-                var args;
-                if (period) {
-                    args = {
-                        params: {
-                            period: period
-                        }
-                    };
-                }
+                    var args;
+                    if (period) {
+                        args = {
+                            params: {
+                                period: period
+                            }
+                        };
+                    }
 
-                return $http.get($composer.http + 'api/stats/' + type, args);
-            };
+                    return $http.get($composer.http + 'api/stats/' + type, args);
+                },
+                timeouts = {
+                    day: 86400,
+                    three_days: 259200,
+                    week: 604800,
+                    fortnight: 1209600,
+                    month: 2592000
+                };
 
             return {
                 connections: function (period) {
@@ -190,6 +197,26 @@
                 },
                 offline: function (period) {
                     return makeRequest('offline', period);
+                },
+                ignore_list: function () {
+                    return makeRequest('ignore_list');
+                },
+                ignore: function (id, klass, timeout, title, reason, sys_id) {
+                    var date = Math.ceil(Date.now() / 1000) + timeouts[timeout];
+                    return $http.post($composer.http + 'api/stats/ignore', {
+                        id: id,
+                        sys_id: sys_id,
+                        klass: klass,
+                        timeout: date,
+                        title: title,
+                        reason: reason
+                    });
+                },
+                unignore: function (id) {
+                    return $http.post($composer.http + 'api/stats/ignore', {
+                        id: id,
+                        remove: true
+                    });
                 }
             };
         }]).
