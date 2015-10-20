@@ -192,6 +192,9 @@
                 connections: function (period) {
                     return makeRequest('connections', period);
                 },
+                panels: function (period) {
+                    return makeRequest('panels', period);
+                },
                 triggers: function (period) {
                     return makeRequest('triggers', period);
                 },
