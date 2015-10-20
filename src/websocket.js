@@ -496,8 +496,9 @@
             '$timeout',
             'SystemFactory',
             '$comms',
+            '$location',
 
-            function ($rootScope, $composer, $timeout, System, $comms) {
+            function ($rootScope, $composer, $timeout, System, $comms, $location) {
                 // ---------------------------
                 // connection
                 // ---------------------------
@@ -517,7 +518,14 @@
                         if ($composer.service) {
                             $comms.getToken($composer.service)
                             .then(function (token) {
-                                connection = new WebSocket($composer.ws + '?bearer_token=' + token);
+                                var uri = $composer.ws + '?bearer_token=' + token,
+                                    search = $location.search();
+
+                                if (search.hasOwnProperty('fixed_device')) {
+                                    uri += '&fixed_device=true';
+                                }
+
+                                connection = new WebSocket(uri);
                                 connection.onmessage = onmessage;
                                 connection.onclose = onclose;
                                 connection.onopen = onopen;

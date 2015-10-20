@@ -106,24 +106,24 @@
             '$composer', '$resource', '$http', 'SystemTrigger',
         function ($composer, $resource, $http, Trigger) {
             var custom = angular.extend({
-                    'funcs': {
+                    funcs: {
                         method:'GET',
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/funcs'
                     },
-                    'exec': {
+                    exec: {
                         method:'POST',
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/exec',
                         isArray: true
                     },
-                    'types': {
+                    types: {
                         method:'GET',
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/types',
                         isArray: true
                     },
-                    'count': {
+                    count: {
                         method:'GET',
                         headers: common_headers,
                         url: $composer.http + 'api/systems/:id/count'
@@ -222,9 +222,22 @@
         }]).
 
         factory('Log', ['$composer', '$resource', function ($composer, $resource) {
+            var custom = angular.extend({
+                    missing_connections: {
+                        method:'GET',
+                        headers: common_headers,
+                        url: $composer.http + 'api/logs/missing_connections'
+                    },
+                    system_logs: {
+                        method:'GET',
+                        headers: common_headers,
+                        url: $composer.http + 'api/logs/system_logs'
+                    }
+                }, common_crud);
+
             return $resource($composer.http + 'api/logs/:id', {
                 id: '@id'
-            }, common_crud);
+            }, custom);
         }]).
 
         factory('Authority', ['$http', '$q', function ($http, $q) {
@@ -259,7 +272,7 @@
 
         factory('User', ['$composer', '$resource', '$rootScope', function ($composer, $resource, $rootScope) {
             var custom = angular.extend({
-                'current': {
+                current: {
                     method:'GET',
                     headers: common_headers,
                     url: $composer.http + 'api/users/current'
