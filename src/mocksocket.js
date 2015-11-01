@@ -70,6 +70,32 @@
     angular.module('Composer')
 
 
+        // Emulate obtaining the current user
+        .factory('User', ['$q', '$rootScope', '$timeout', function ($q, $rootScope, $timeout) {
+            var user = {};
+            user.logged_in = function () {
+                var defer = $q.defer();
+                $timeout(function () {
+                    defer.resolve('12345'); // returns our oauth token in production
+                }, 50);
+                return defer.promise;
+            };
+            user.get_current = function (force) {
+                var defer = $q.defer();
+                $timeout(function () {
+                    var user = {
+                        id: 'user-1234',
+                        name: 'Steve Bob'
+                    };
+                    $rootScope.currentUser = user;
+                    defer.resolve(user);
+                }, 50);
+                return defer.promise;
+            }
+            return user;
+        }])
+
+
         // emulate a subset of the API
         .factory('System', ['$http', '$q', function ($http, $q) {
             var getSystemData = function (id) {
