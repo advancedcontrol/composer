@@ -167,6 +167,22 @@
             }, common_crud);
         }]).
 
+        factory('Discovery', ['$composer', '$resource', function ($composer, $resource) {
+            var custom = angular.extend({
+                    scan: {
+                        method: 'POST',
+                        headers: common_headers,
+                        url: $composer.http + 'api/discovery/scan'
+                    }
+                }, common_crud),
+
+                disc = $resource($composer.http + 'api/discovery/:id', {
+                    id: '@id',
+                }, custom);
+
+            return disc;
+        }]).
+
         factory('Stats', ['$composer', '$http', function ($composer, $http) {
             var makeRequest = function (type, period) {
                     var args;
