@@ -645,6 +645,9 @@
                                 data[mod][index].connected = true;
                             }
 
+                            if (!sys[lookup][name]) {
+                                console.warn("WARNING: name not found", lookup, name)
+                            }
 
                             var moduleInstance = sys[lookup],
                                 statusVariable = moduleInstance[name],

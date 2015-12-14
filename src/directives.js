@@ -368,6 +368,9 @@
 
                         // Status binding
                         pendingCheck,
+                        escapeVar = function (str) {
+                            return str.replace(/( |-)/g, '$_');
+                        },
                         checkCanBind = function () {
                             performUnbind();
 
@@ -378,8 +381,8 @@
                                 pendingCheck = $timeout(function () {
                                     pendingCheck = null;
                                     if (coSystem && coModule && coIndex && coBind) {
-                                        boundTo = '$stat_' + coBind;
-                                        boundCounter = '$stat_' + coBind + '_bindings';
+                                        boundTo = '$stat_' + escapeVar(coBind);
+                                        boundCounter = boundTo + '_bindings';
 
                                         // Ensure unbinding is required
                                         if (boundMod && boundMod !== coModule) {
