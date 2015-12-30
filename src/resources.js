@@ -155,6 +155,12 @@
             }, common_crud);
         }]).
 
+        factory('Node', ['$composer', '$resource', function ($composer, $resource) {
+            return $resource($composer.http + 'api/nodes/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
         factory('Group', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/groups/:id', {
                 id: '@id'
