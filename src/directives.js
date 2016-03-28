@@ -451,7 +451,7 @@
                             localWatch = $scope.$watch(oldLocal, function (newval) {
                                 if (newval != serverVal || newval != lastLocal) {
                                     lastLocal = newval;
-                                    $scope[boundTo].update(newval);
+                                    $scope[boundTo].update(newval, execParams);
                                 }
                             });
 

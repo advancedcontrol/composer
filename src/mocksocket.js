@@ -273,7 +273,7 @@
                         }
                     };
 
-                    var _update = function () {
+                    var _update = function (execParams) {
                             if (simpleExecs.length > 0) {
                                 connection.exec(
                                     system.id,
@@ -284,17 +284,19 @@
                                 );
                             }
                             execs.forEach(function(exec) {
-                                connection.exec(
-                                    system.id,
-                                    moduleInstance.$_name,
-                                    moduleInstance.$_index,
-                                    exec.fn,
-                                    exec.params()
-                                );
+                                if (execParams === exec.params) {
+                                    connection.exec(
+                                        system.id,
+                                        moduleInstance.$_name,
+                                        moduleInstance.$_index,
+                                        exec.fn,
+                                        exec.params()
+                                    );
+                                }
                             });
                         };
 
-                    this.update = function(val) {
+                    this.update = function(val, execParams) {
                         // ignore updates until a connection is available
                         if (!system.id || !connection.connected)
                             return;
@@ -309,11 +311,11 @@
                         // period.
                         if (throttlePeriod > 0) {
                             timeout = setTimeout(function() {
-                                _update();
+                                _update(execParams);
                                 timeout = null;
                             }, throttlePeriod);
                         } else {
-                            _update();
+                            _update(execParams);
                         }
                     };
 
