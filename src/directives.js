@@ -369,7 +369,7 @@
                         // Status binding
                         pendingCheck,
                         escapeVar = function (str) {
-                            return str.replace(/( |-)/g, '$_');
+                            return str.replace(/( |-|\.)/g, '$_');
                         },
                         checkCanBind = function () {
                             performUnbind();
