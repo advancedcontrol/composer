@@ -23,7 +23,7 @@
     // timers
     var SECONDS = 1000,
         RECONNECT_TIMER_SECONDS  = 5 * SECONDS,
-        KEEP_ALIVE_TIMER_SECONDS = 60 * SECONDS;
+        KEEP_ALIVE_TIMER_SECONDS = 15 * SECONDS;
 
     // protocol
     var PING    = 'ping',
@@ -547,7 +547,11 @@
 
                     startKeepAlive = function () {
                         keepAliveInterval = window.setInterval(function() {
-                            connection.send(PING);
+                            try {
+                                connection.send(PING);
+                            } catch (e) {
+                                location.reload();
+                            }
                         }, KEEP_ALIVE_TIMER_SECONDS);
                     },
 
@@ -694,9 +698,13 @@
                         if (args !== undefined)
                             request.args = args;
 
-                        connection.send(
-                            JSON.stringify(request)
-                        );
+                        try {
+                            connection.send(
+                                JSON.stringify(request)
+                            );
+                        } catch (e) {
+                            location.reload();
+                        }
 
                         if ($composer.debug) {
                             delete request.id;
