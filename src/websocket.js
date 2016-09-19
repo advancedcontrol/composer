@@ -430,6 +430,9 @@
                                     connection.setSystemID(name, resp.id);
                                     system.id = resp.id;
                                     bind();
+
+                                    // Emit data for analytics
+                                    $rootScope.$emit('SystemZones', system.zones);
                                 } else {
                                     debugMsg('System changed before id received for ', name);
                                 }

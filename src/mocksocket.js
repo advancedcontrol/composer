@@ -666,7 +666,7 @@
 
                             // Emulate request time. Random number as requests
                             //  do not always come back in sequence either
-                        }, getRandomInt(50, 400));
+                        }, 150);
                     }
 
                     return res;
