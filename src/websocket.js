@@ -23,7 +23,7 @@
     // timers
     var SECONDS = 1000,
         RECONNECT_TIMER_SECONDS  = 5 * SECONDS,
-        KEEP_ALIVE_TIMER_SECONDS = 15 * SECONDS;
+        KEEP_ALIVE_TIMER_SECONDS = 14 * SECONDS;
 
     // protocol
     var PING    = 'ping',
@@ -432,7 +432,7 @@
                                     bind();
 
                                     // Emit data for analytics
-                                    $rootScope.$emit('SystemZones', system.zones);
+                                    $rootScope.$emit('SystemZones', resp.zones);
                                 } else {
                                     debugMsg('System changed before id received for ', name);
                                 }

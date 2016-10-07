@@ -145,6 +145,7 @@
                             // Copy as we don't want to add id as a key to the object
                             resp = angular.copy(resp);
                             resp.id = opts.id;
+                            resp.zones = ['zone_12-234', 'zone_12-ab', 'zone_12-4g'];
 
                             func1(resp);
                         }, func2)
@@ -480,6 +481,9 @@
                             connection.setSystemID(name, name);
                             system.id = name;
                             bind();
+
+                            $rootScope.$emit('SystemZones', resp.zones);
+                            delete resp.zones;
                         } else {
                             debugMsg('System changed before id received for ', name);
                         }
