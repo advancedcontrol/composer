@@ -166,6 +166,27 @@
                 id: '@id'
             }, common_crud);
         }]).
+    
+        factory('Domain', ['$composer', '$resource', function ($composer, $resource) {
+            var base = $composer.http.split('/').slice(0, -2).join('/') + '/';
+            return $resource(base + 'auth/api/domains/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('DomApp', ['$composer', '$resource', function ($composer, $resource) {
+            var base = $composer.http.split('/').slice(0, -2).join('/') + '/';
+            return $resource(base + 'auth/api/applications/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
+
+        factory('AuthSource', ['$composer', '$resource', function ($composer, $resource) {
+            var base = $composer.http.split('/').slice(0, -2).join('/') + '/';
+            return $resource(base + 'auth/api/authsources/:id', {
+                id: '@id'
+            }, common_crud);
+        }]).
 
         factory('Zone', ['$composer', '$resource', function ($composer, $resource) {
             return $resource($composer.http + 'api/zones/:id', {
