@@ -68,10 +68,18 @@
     angular.module('Composer').
 
         factory('Module', ['$composer', '$resource', function ($composer, $resource) {
+            var custom = angular.extend({
+                    ping: {
+                        method:'POST',
+                        headers: common_headers,
+                        url: $composer.http + 'api/modules/:id/ping'
+                    }
+                }, common_crud);
+            
             return $resource($composer.http + 'api/modules/:id/:task', {
                 id: '@id',
                 task: '@_task'
-            }, common_crud);
+            }, custom);
         }]).
 
         factory('SystemModule', ['$composer', '$resource', function ($composer, $resource) {
